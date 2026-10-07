@@ -1,6 +1,6 @@
 # 🖨️ PrintDeck
 
-Fila de impressão 3D compartilhada entre amigos. Cada um manda o G-code fatiado no Cura; o PrintDeck lê o tempo e o filamento do arquivo, calcula o custo, organiza a fila e mostra quanto cada pessoa já usou da impressora. O dono da impressora controla tudo por um painel, no computador ou no celular.
+Fila de impressão 3D compartilhada. Cada um manda o G-code fatiado no Cura; o PrintDeck lê o tempo e o filamento do arquivo, calcula o custo, organiza a fila e mostra quanto cada pessoa já usou da impressora. O dono da impressora controla tudo por um painel, no computador ou no celular.
 
 Feito para uma Creality Ender 3 / Ender 3 Pro com OctoPrint, mas funciona com qualquer impressora que aceite G-code do Cura (inclusive só com cartão microSD).
 
