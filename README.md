@@ -1,88 +1,131 @@
-# 🖨️ PrintDeck
+<p align="center">
+  <img src="static/app/icone-512.png" width="96" alt="PrintDeck">
+</p>
 
-Fila de impressão 3D compartilhada. Cada um manda o G-code fatiado no Cura; o PrintDeck lê o tempo e o filamento do arquivo, calcula o custo, organiza a fila e mostra quanto cada pessoa já usou da impressora. O dono da impressora controla tudo por um painel, no computador ou no celular.
+<h1 align="center">PrintDeck</h1>
 
-Feito para uma Creality Ender 3 / Ender 3 Pro com OctoPrint, mas funciona com qualquer impressora que aceite G-code do Cura (inclusive só com cartão microSD).
+<p align="center">
+  Fila de impressão 3D compartilhada.<br>
+  Os amigos mandam o G-code por um link; você controla a fila, os custos e a impressora.
+</p>
 
-## O que ele faz
+<p align="center">
+  <a href="https://github.com/renatoacj/printdeck/releases/latest"><img src="https://img.shields.io/github/v/release/renatoacj/printdeck?label=download&color=2a78d6" alt="Download"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/Android%20%7C%20iPhone-app%20instal%C3%A1vel-3ddc84" alt="Android | iPhone">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-green" alt="Licença MIT"></a>
+</p>
 
-- **Fila com previsão**: tempo, filamento, custo e horário em que cada peça começa e termina.
-- **Custos transparentes**: material (preço por kg) + energia (potência × tempo × tarifa), por impressão e por amigo.
-- **Dashboard**: quem mais usou a impressora, gastos de cada um, falhas e o que está imprimindo agora.
-- **Rolos de filamento**: cada impressão fica marcada com o código do rolo; o programa desconta o que saiu de verdade e avisa quando o rolo não vai dar para a fila.
-- **OctoPrint**: enviar e imprimir com um clique, progresso e temperaturas ao vivo, pausar/retomar/cancelar, modelo 3D sendo construído na tela. A impressão **nunca começa sozinha**: só quando o dono clica.
+---
+
+## Recursos
+
+- **Fila com previsão**: cada pedido mostra tempo, filamento, custo e o horário em que começa e termina.
+- **Custos transparentes**: material (preço por kg) + energia (potência × tempo × tarifa), por impressão e por pessoa.
+- **Dashboard**: quem mais usou a impressora, quanto cada um gastou, falhas e o que está imprimindo agora.
+- **Rolos de filamento**: cada impressão fica marcada com o código do rolo. O programa desconta o que saiu de verdade e avisa quando o rolo não vai dar para a fila.
+- **OctoPrint**: imprimir com um clique, progresso e temperaturas ao vivo, pausar, retomar e cancelar, e o modelo 3D sendo construído na tela. A impressão **nunca começa sozinha**: só quando o dono clica.
 - **Mesa conjunta**: junta vários G-codes do Cura em uma impressão só, encaixando as peças na mesa de 220 × 220 mm e dividindo o custo por peça.
 - **Reimprimir com um clique** a partir do histórico.
-- **Aplicativo de desktop** (Windows): janela própria, ícone na bandeja, sem terminal aberto.
-- **Aplicativo no celular** (Android/iPhone): instalável direto do navegador.
-- **Acesso pela internet** para os amigos, sem eles instalarem nada.
+- **Aplicativo de desktop**: janela própria e ícone na bandeja, sem terminal aberto.
+- **Aplicativo no celular**: instalável no Android e no iPhone direto do navegador.
+- **Link para os amigos**: fixo e gratuito com o Tailscale Funnel, ou automático com um [Cloudflare Quick Tunnel](https://try.cloudflare.com). Eles não instalam nada.
+- **Seguro por padrão**: senhas com hash, limite de tentativas, e a senha de fábrica nunca é aceita pelo link público.
 
-## Como instalar (Windows)
+## Instalar
 
-1. Baixe o **`PrintDeck-x.y.z.zip`** na página de [Releases](https://github.com/renatoacj/printdeck/releases/latest).
-2. Extraia numa pasta definitiva (ex.: `C:\PrintDeck`). Não mova a pasta depois: o atalho aponta para ela.
-3. Dê dois cliques em **`instalar.bat`**. Ele instala o Python se faltar, prepara tudo (1 a 3 minutos), cria o atalho **PrintDeck** na Área de Trabalho e no menu Iniciar e abre o programa.
+**[⬇ Baixar o instalador (última versão)](https://github.com/renatoacj/printdeck/releases/latest)**
 
-Depois disso é só abrir pelo atalho: o PrintDeck roda numa janela própria e fica na bandeja, perto do relógio, quando você fecha a janela.
+Baixe o `PrintDeck-x.y.z.zip`, extraia numa pasta definitiva (ex.: `C:\PrintDeck`) e dê dois cliques em **`instalar.bat`**. Ele instala o Python se faltar, prepara tudo em 1 a 3 minutos, cria o atalho **PrintDeck** na Área de Trabalho e abre o programa.
 
-O Windows pode mostrar um aviso ao abrir o `instalar.bat` por ele ter vindo da internet: clique em "Mais informações → Executar assim mesmo".
-
-**Outras formas:** `iniciar.bat` abre no navegador, com um terminal (sem atalho nem bandeja). No Linux / Raspberry Pi: `./iniciar.sh`.
-
-## Primeiros passos
-
-1. Abra **Administrativo** (senha inicial `admin`).
-2. Em **Configurações → Custos e senhas**, troque a senha do administrador e defina a **senha da galera** (a senha que você passa para os amigos). O acesso pela internet só liga depois que a senha de fábrica for trocada, e ela nunca é aceita pelo link público.
-3. Ajuste a tarifa de energia, a potência da impressora e o preço do kg de cada material.
-4. Cadastre o rolo de filamento em **Configurações → Filamentos**.
-5. (Opcional) Em **Impressora (OctoPrint)**, informe o endereço do OctoPrint e a chave de API (OctoPrint → Configurações → *Application Keys*).
-
-## Como os amigos acessam
-
-No Administrativo, cartão **Link para os amigos → Ligar acesso pela internet**. Há dois jeitos, e o programa escolhe sozinho:
-
-| | Link | O que precisa |
-|---|---|---|
-| **Tailscale Funnel** | Fixo: `https://nome-do-pc.sua-rede.ts.net` | [Tailscale](https://tailscale.com/download) instalado e logado neste computador, com o Funnel liberado (rode `tailscale funnel 5000` uma vez e aprove no endereço que ele mostrar) |
-| **Cloudflare (túnel rápido)** | Muda quando o túnel reinicia | Só o `cloudflared` instalado (`winget install Cloudflare.cloudflared`); sem conta |
-
-Se o Tailscale estiver pronto, o PrintDeck usa o link fixo; senão, cai no túnel do Cloudflare. Na mesma rede Wi-Fi também funciona `http://IP-DO-PC:5000`.
-
-O link só funciona enquanto o programa estiver aberto (pode ficar na bandeja).
-
-## Aplicativo no celular
-
-Abra o link no **Chrome do Android** → **⋮ → Instalar app**. No iPhone: Safari → Compartilhar → **Adicionar à Tela de Início**. O dono pode entrar como administrador pelo **link fixo do administrador** (cartão "Link para os amigos") ou por QR Code.
+- **Requisitos:** Windows 10 ou 11, 64 bits. Feito para a Creality Ender 3 / Ender 3 Pro com G-code do Cura; o OctoPrint é opcional.
+- **Aviso do Windows:** como o instalador veio da internet e não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**.
+- **Não mova a pasta** depois de instalar: o atalho aponta para ela.
 
 ## Como usar
 
-**Amigo**: no Cura, fatiar → "Salvar no disco"; abrir o link, digitar o nome, escolher o rolo e enviar um ou mais `.gcode`. Dá para pedir que várias peças sejam impressas juntas na mesma mesa.
+1. Abra o **PrintDeck** e entre em **Administrativo** (senha inicial `admin`).
+2. Em **Configurações**, troque a senha do administrador, defina a **senha da galera** (a que você passa para os amigos), ajuste a tarifa de energia e cadastre o rolo de filamento.
+3. No cartão **Link para os amigos**, clique em **Ligar acesso pela internet** e mande o link no grupo.
+4. Cada amigo fatia no Cura (**"Salvar no disco"**), abre o link, digita o nome e envia um ou mais `.gcode`.
+5. Confira a mesa e clique em **Imprimir** (com OctoPrint), ou baixe o G-code para o microSD e marque **Imprimindo** / **Concluída** / **Falhou** à mão.
 
-**Dono**: conferir a mesa e clicar em **Imprimir** (OctoPrint) ou baixar o G-code para o microSD e marcar **Imprimindo** / **Concluída** / **Falhou** à mão. Uma falha conta para o amigo por padrão; dá para desligar a cobrança de cada impressão.
+> Dica: para ver a miniatura da peça na fila, ative no Cura *Extensões → Pós-processamento → Modificar G-code → "Create Thumbnail"*.
 
-Miniatura da peça na fila (opcional): no Cura, *Extensões → Pós-processamento → Modificar G-code → "Create Thumbnail"*.
+### Link fixo para os amigos
 
-## Como os custos são calculados
+| | Link | O que precisa |
+|---|---|---|
+| **Tailscale Funnel** | Fixo: `https://nome-do-pc.sua-rede.ts.net` | [Tailscale](https://tailscale.com/download) instalado e logado no computador, com o Funnel liberado (rode `tailscale funnel 5000` uma vez e aprove no endereço que ele mostrar) |
+| **Cloudflare Quick Tunnel** | Muda quando o túnel reinicia | Só o `cloudflared` (`winget install Cloudflare.cloudflared`); sem conta |
+
+Se o Tailscale estiver pronto, o PrintDeck usa o link fixo; senão, usa o túnel do Cloudflare. Na mesma rede Wi-Fi também funciona `http://IP-DO-PC:5000`.
+
+### Aplicativo no celular
+
+Abra o link no **Chrome do Android** e toque em **⋮ → Instalar app**. No iPhone: Safari → Compartilhar → **Adicionar à Tela de Início**. O dono entra como administrador pelo **link fixo do administrador** ou por QR Code, ambos no cartão "Link para os amigos".
+
+### OctoPrint
+
+Em **Administrativo → Configurações → Impressora (OctoPrint)**, informe o endereço (ex.: `http://octopi.local`) e a chave de API (no OctoPrint: Configurações → *Application Keys*). A partir daí cada pedido ganha o botão **Imprimir**, e o progresso, o tempo real e o filamento gasto são registrados sozinhos. Uma impressão cancelada vira **Falhou em X%** e só o filamento usado até ali entra na conta.
+
+## Rodar pelo código
+
+Requisitos: [Python 3.10+](https://www.python.org/downloads/).
+
+```bash
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python desktop.py
+```
+
+`python app.py` (ou `iniciar.bat`) sobe só o servidor e abre no navegador, sem janela própria nem bandeja. No Linux / Raspberry Pi: `./iniciar.sh`.
+
+Para criar os atalhos da Área de Trabalho e do menu Iniciar: `.venv\Scripts\python desktop.py --atalho`.
+
+## Como funciona
+
+```
+┌────────────────────── PrintDeck (computador do dono) ──────────────────────┐
+│  Flask (porta 5000): fila, custos, dashboard e administrativo              │
+│  SQLite (fila.db) + pasta com os G-codes enviados                          │
+│  Janela própria (WebView2) + ícone na bandeja                              │
+└───────────┬─────────────────────────────────────────┬──────────────────────┘
+            │ API do OctoPrint (rede de casa)         │ Tailscale Funnel ou cloudflared
+            ▼                                         ▼
+  Raspberry Pi + OctoPrint → impressora      https://…  →  navegador ou app dos amigos
+```
+
+| Arquivo | Função |
+|---|---|
+| [`app.py`](app.py) | Servidor: fila, custos, rolos, dashboard, administrativo e sincronização com o OctoPrint |
+| [`desktop.py`](desktop.py) | Aplicativo de desktop: janela, bandeja e atalhos |
+| [`gcode_parser.py`](gcode_parser.py) | Lê tempo, filamento e miniatura do G-code; calcula o filamento que saiu até cada ponto do arquivo |
+| [`juntar.py`](juntar.py) | Mesa conjunta: encaixa as peças na mesa e costura os G-codes camada por camada |
+| [`octoprint.py`](octoprint.py) | Cliente da API do OctoPrint |
+| [`tunel.py`](tunel.py) | Link público: Tailscale Funnel ou `cloudflared` |
+| [`templates/`](templates) | Páginas (fila, dashboard, administrativo) |
+| [`static/visualizador.js`](static/visualizador.js) | Modelo 3D da peça sendo impressa (three.js) |
+| [`static/app/`](static/app) | Aplicativo instalável no celular (manifesto, ícones e service worker) |
+| [`instalar.bat`](instalar.bat) | Instalador para Windows |
+
+**Como os custos são calculados**
 
 - **Filamento (g)** = metros (do Cura) × área da seção do filamento × densidade. Ex.: 1 m de PLA de 1,75 mm ≈ 2,98 g.
 - **Material (R$)** = gramas ÷ 1000 × preço do kg.
 - **Energia (R$)** = potência (W) ÷ 1000 × horas × tarifa (R$/kWh).
 - Numa falha ou cancelamento, vale só o filamento que realmente saiu até aquele ponto do arquivo.
-- Os custos ficam congelados quando a impressão termina; mudar preços só afeta o que ainda está na fila.
 
-## Onde ficam os dados
+**Onde ficam os dados:** na pasta `dados/` do projeto, ou em `~/PrintDeck/dados` se essa pasta existir (recomendado quando o projeto está numa pasta sincronizada, como o OneDrive). Uma cópia do banco é feita por dia em `copias_de_seguranca/`. Senhas, chave do OctoPrint e arquivos dos amigos nunca vão para o repositório.
 
-Banco (`fila.db`) e G-codes ficam na pasta `dados/` do projeto, ou em `~/PrintDeck/dados` se essa pasta existir (recomendado quando o projeto está dentro de uma pasta sincronizada, como o OneDrive). Uma cópia do banco é feita por dia em `copias_de_seguranca/`. Para usar outro lugar, defina a variável `DATA_DIR`.
+## Limitações
 
-Nada disso vai para o repositório: senhas, chave do OctoPrint e arquivos dos amigos ficam só no seu computador.
+- **O computador precisa ficar ligado** com o PrintDeck aberto (pode ficar na bandeja) para o link funcionar e a impressão ser acompanhada.
+- **Sem contas de usuário**: os amigos se identificam só pelo nome. Use entre pessoas de confiança e com a senha da galera definida.
+- **O G-code é executado como veio**: o programa não analisa se o arquivo tem comandos perigosos. Confira o que vai imprimir.
+- **Mesa conjunta** só aceita G-codes do Cura com a mesma altura de camada, temperaturas compatíveis e o mesmo rolo.
+- **Quick Tunnel**: a Cloudflare oferece esse serviço de graça e sem garantia de disponibilidade, e o link muda quando o túnel reinicia. Para link fixo, use o Tailscale Funnel.
 
-## Segurança
+## Licença
 
-- Senhas guardadas com hash; limite de tentativas por aparelho; sessão de administrador encerrada em todos os aparelhos ao trocar a senha ou o link fixo.
-- Só o site da fila vai para a internet. O OctoPrint não fica exposto e os amigos não falam com ele.
-- A identificação dos amigos é só pelo nome (não há contas): use entre pessoas de confiança e com a senha da galera definida.
-- O G-code enviado é executado pela impressora como veio: confira o que vai imprimir.
-
-## Tecnologia
-
-Python 3.12, Flask, SQLite, three.js (visualizador), Chart.js, pywebview + pystray (aplicativo de desktop).
+[MIT](LICENSE)
