@@ -19,17 +19,15 @@ Feito para uma Creality Ender 3 / Ender 3 Pro com OctoPrint, mas funciona com qu
 
 ## Como instalar (Windows)
 
-1. Instale o [Python 3.12+](https://www.python.org/downloads/) (marque "Add to PATH").
-2. Baixe este repositório e dê dois cliques em **`iniciar.bat`**. Na primeira vez ele cria o ambiente e instala as dependências; depois abre http://localhost:5000.
-3. Para usar como aplicativo (janela + bandeja, sem terminal):
+1. Baixe o **`PrintDeck-x.y.z.zip`** na página de [Releases](https://github.com/renatoacj/printdeck/releases/latest).
+2. Extraia numa pasta definitiva (ex.: `C:\PrintDeck`). Não mova a pasta depois: o atalho aponta para ela.
+3. Dê dois cliques em **`instalar.bat`**. Ele instala o Python se faltar, prepara tudo (1 a 3 minutos), cria o atalho **PrintDeck** na Área de Trabalho e no menu Iniciar e abre o programa.
 
-   ```
-   .venv\Scripts\python desktop.py --atalho
-   ```
+Depois disso é só abrir pelo atalho: o PrintDeck roda numa janela própria e fica na bandeja, perto do relógio, quando você fecha a janela.
 
-   Isso cria o atalho **PrintDeck** na Área de Trabalho e no menu Iniciar.
+O Windows pode mostrar um aviso ao abrir o `instalar.bat` por ele ter vindo da internet: clique em "Mais informações → Executar assim mesmo".
 
-No Linux / Raspberry Pi: `./iniciar.sh`.
+**Outras formas:** `iniciar.bat` abre no navegador, com um terminal (sem atalho nem bandeja). No Linux / Raspberry Pi: `./iniciar.sh`.
 
 ## Primeiros passos
 
