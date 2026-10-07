@@ -1,0 +1,139 @@
+{# Quadro "Imprimindo agora", usado na fila (amigos) e no painel do dono. Atualiza via static/ao_vivo.js #}
+{% from "_icones.html" import ic %}
+{% from "_fila.html" import mesa_svg %}
+{% macro agora(fila, impressora, dono=False, classe='') %}
+{% set atual = fila|selectattr('status', 'equalto', 'imprimindo')|first %}
+{% set proxima = fila|selectattr('status', 'equalto', 'aguardando')|first %}
+{% set i = impressora %}
+<section class="card now {{ 'is-busy' if atual }} {{ classe }}" id="impressora" data-job="{{ atual.id if atual else '' }}"
+         data-ocupada="{{ 'true' if i.ocupada else 'false' }}" data-conectada="{{ 'true' if i.conectada else 'false' }}"
+         data-pausada="{{ 'true' if i.pausada else 'false' }}">
+  <div class="now-head">
+    {% if i.configurada %}
+      <span class="dot {{ 'on' if i.conectada else 'off' }}"></span>
+      <strong data-live="texto">{{ i.texto if i.online else 'Sem contato com o OctoPrint' }}</strong>
+    {% else %}
+      <span class="dot {{ 'on' if atual else 'off' }}"></span>
+      <strong>{{ 'Imprimindo' if atual else 'Impressora livre' }}</strong>
+    {% endif %}
+    {% if i.conectada %}
+      <span class="chips">
+        <span class="chip" title="Temperatura do bico (atual / alvo)">{{ ic('flame') }} <b data-live="bico">{{ '%.0f'|format(i.temp_bico or 0) }}</b>/{{ '%.0f'|format(i.alvo_bico or 0) }}°</span>
+        <span class="chip" title="Temperatura da mesa (atual / alvo)">{{ ic('square') }} <b data-live="mesa">{{ '%.0f'|format(i.temp_mesa or 0) }}</b>/{{ '%.0f'|format(i.alvo_mesa or 0) }}°</span>
+      </span>
+    {% endif %}
+  </div>
+
+  {% if dono and i.erro %}<div class="flash erro now-flash">{{ i.erro }}</div>{% endif %}
+
+  {% if atual %}
+    <div class="now-grid">
+      <div class="now-left">
+        <div class="now-body">
+          <div class="thumb lg {{ 'mesa' if atual.eh_lote }}">{% if atual.eh_lote %}{{ mesa_svg(atual.mesa) }}{% elif atual.miniatura %}<img src="{{ url_for('miniatura', pid=atual.id) }}" alt="">{% else %}{{ ic('cube3d') }}{% endif %}</div>
+          <div class="now-info">
+            <div class="eyebrow">{{ 'Pausada' if i.pausada else 'Imprimindo agora' }}</div>
+            {% set tem_nome = atual.observacao and not atual.eh_lote %}
+            <div class="now-title">{% if tem_nome %}{{ atual.observacao }}{% else %}{{ atual.arquivo_original|quebra }}{% endif %}</div>
+            {% if tem_nome %}<div class="now-arq" title="{{ atual.arquivo_original }}">{{ ic('file') }}<span>{{ atual.arquivo_original }}</span></div>{% endif %}
+            <div class="muted small">de <b class="ink">{{ atual.amigo }}</b> · {{ atual.gramas|gramas }} {{ atual.material_nome or '' }} · {{ atual.custo_total|reais }}</div>
+            {% if atual.eh_lote %}
+              <ul class="pecas-lote">{% for p in atual.pecas %}<li title="{{ p.arquivo_original }}"><span class="nome-arq">{{ p.observacao or p.arquivo_original }}</span><span class="muted">{{ p.amigo }} · {{ p.gramas|gramas }} · {{ p.custo_total|reais }}</span></li>{% endfor %}</ul>
+            {% endif %}
+            {% if atual.rolo %}
+              {% if atual.rolo_acaba_pct is defined %}
+                <div class="rolo-aviso">{{ ic('alert') }} O rolo <b>{{ atual.rolo.codigo }}</b> tem {{ atual.rolo.restante_g|gramas }} e deve acabar em ~{{ '%.0f'|format(atual.rolo_acaba_pct) }}% desta peça</div>
+              {% else %}
+                <div class="rolo-linha">{{ ic('spool') }} Rolo <b>{{ atual.rolo.codigo }}</b>{% if atual.rolo.descricao %} · {{ atual.rolo.descricao }}{% endif %} · sobram ~{{ atual.rolo_sobra_fim|gramas }} ao terminar</div>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+        <div class="now-progress">
+          <div class="big-pct"><span data-live="pct">{{ '%.0f'|format(atual.progresso or 0) }}</span><small>%</small></div>
+          <div class="progress lg"><div data-live="barra" style="width: {{ atual.progresso or 0 }}%"></div></div>
+          <div class="now-times">
+            <div><span class="k">Faltam</span><b data-live="restante">{{ ((atual.previsao - agora_dt).total_seconds() if atual.previsao > agora_dt else 0)|duracao }}</b></div>
+            <div><span class="k">Fica pronta</span><b data-live="fim">{{ atual.previsao|dataHora }}</b></div>
+            <div><span class="k">Tempo total</span><b>{{ atual.tempo_s|duracao }}</b></div>
+            <div><span class="k">Filamento</span><b><span data-live="gagora">{{ ('%.1f'|format(atual.gramas_agora or 0))|replace('.', ',') }} g</span> <span class="muted">/ {{ atual.gramas|gramas }}</span></b></div>
+          </div>
+        </div>
+        {% if dono %}
+          <div class="now-actions">
+            {% if i.online and not i.conectada %}
+              <form method="post" action="{{ url_for('octoprint_acao', acao='conectar') }}"><button>{{ ic('plug') }} Conectar impressora</button></form>
+            {% endif %}
+            {% if atual.octoprint_arquivo and i.configurada %}
+              {% if i.imprimindo and not i.pausada %}
+                <form method="post" action="{{ url_for('octoprint_acao', acao='pausar') }}"><button class="ghost">{{ ic('pause') }} Pausar</button></form>
+              {% endif %}
+              {% if i.pausada %}
+                <form method="post" action="{{ url_for('octoprint_acao', acao='retomar') }}"><button>{{ ic('play') }} Retomar</button></form>
+              {% endif %}
+              {% if i.ocupada %}
+                <form method="post" action="{{ url_for('octoprint_acao', acao='cancelar') }}"
+                      onsubmit="return confirm('Cancelar a impressão agora? Ela vai ser marcada como “Falhou” e só o material usado até aqui entra na conta.')">
+                  <button class="danger">{{ ic('x') }} Cancelar</button></form>
+              {% endif %}
+            {% else %}
+              <form method="post" action="{{ url_for('mudar_status', pid=atual.id) }}">
+                <input type="hidden" name="status" value="concluida"><button>{{ ic('check') }} Concluída</button></form>
+              <form method="post" action="{{ url_for('mudar_status', pid=atual.id) }}">
+                <input type="hidden" name="status" value="falhou"><button class="danger">{{ ic('x') }} Falhou</button></form>
+            {% endif %}
+            <details class="mais">
+              <summary class="btn ghost icon" aria-label="Mais opções">{{ ic('more') }}</summary>
+              <div class="menu">
+                {% if atual.octoprint_arquivo %}
+                  <form method="post" action="{{ url_for('mudar_status', pid=atual.id) }}"><input type="hidden" name="status" value="concluida"><button class="ghost sm">Marcar concluída à mão</button></form>
+                  <form method="post" action="{{ url_for('mudar_status', pid=atual.id) }}"><input type="hidden" name="status" value="falhou"><button class="ghost sm">Marcar falha à mão</button></form>
+                {% endif %}
+                <form method="post" action="{{ url_for('mudar_status', pid=atual.id) }}"><input type="hidden" name="status" value="aguardando"><button class="ghost sm">{{ ic('repeat') }} Voltar para a fila</button></form>
+                <a class="btn ghost sm" href="{{ url_for('baixar', pid=atual.id) }}">{{ ic('download') }} Baixar G-code</a>
+              </div>
+            </details>
+          </div>
+          {% if i.configurada %}
+            <div class="octo-cam" id="cam" hidden><img id="cam-img" alt="Webcam da impressora"></div>
+          {% endif %}
+        {% endif %}
+        {% if atual.observacao and atual.eh_lote %}<div class="small muted now-obs">{{ ic('message') }} {{ atual.observacao }}</div>{% endif %}
+      </div>
+      <div class="now-right">
+        <div class="viz" id="viz">
+          <button type="button" class="viz-play" id="viz-abrir">
+            <span class="viz-play-ico">{{ ic('cube3d') }}</span>
+            <span>Ver a peça sendo construída em 3D</span>
+            <span class="small muted">gire e dê zoom com o dedo ou o mouse</span>
+          </button>
+        </div>
+        {% if not atual.octoprint_arquivo %}
+          <p class="small muted viz-nota">Impressão pelo cartão: a posição no 3D é estimada pelo tempo.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="now-idle">
+      <div class="now-idle-ico">{{ ic('printer') }}</div>
+      <div>
+        {% if proxima %}
+          <div><b>Nada imprimindo agora.</b></div>
+          <div class="muted">Próxima da fila: <b class="ink">{{ proxima.observacao if (proxima.observacao and not proxima.eh_lote) else proxima.arquivo_original }}</b> de {{ proxima.amigo }}</div>
+        {% else %}
+          <div><b>Nada imprimindo</b> e a fila está vazia.</div>
+        {% endif %}
+        {% if dono and i.online and not i.conectada %}
+          <div class="now-actions">
+            <form method="post" action="{{ url_for('octoprint_acao', acao='conectar') }}"><button>{{ ic('plug') }} Conectar impressora</button></form>
+            <span class="small muted">A Ender 3 está ligada e com o cabo USB no Raspberry?</span>
+          </div>
+        {% endif %}
+      </div>
+      {% if dono and i.configurada %}
+        <div class="octo-cam" id="cam" hidden><img id="cam-img" alt="Webcam da impressora"></div>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+{% endmacro %}

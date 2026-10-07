@@ -1,0 +1,117 @@
+{# Tabela da fila de impressão (painel do dono e página dos amigos) #}
+{% from "_icones.html" import ic %}
+{% macro mesa_svg(mesa) %}<svg class="mesa-svg" viewBox="0 0 220 220" role="img" aria-label="Posição das peças na mesa"><rect class="m" x="1" y="1" width="218" height="218" rx="8"/>{% for p in mesa %}<rect class="p p{{ loop.index0 % 4 }}" x="{{ p.x }}" y="{{ 220 - p.y - p.h }}" width="{{ p.w }}" height="{{ p.h }}" rx="4"><title>{{ p.nome }} · {{ p.amigo }}</title></rect>{% endfor %}</svg>{% endmacro %}
+{% macro tabela_fila(fila, painel=None, dono=False, classe='') %}
+{% set espera = fila|selectattr('status', 'equalto', 'aguardando')|list %}
+<section class="card fila-card {{ classe }}" id="fila">
+  <div class="card-head">
+    <h2>{{ ic('list') }} Fila de impressão <span class="count">{{ espera|length }}</span></h2>
+    {% if espera %}
+      <span class="small muted">
+        {{ espera|sum(attribute='tempo_s')|duracao }} de impressão ·
+        {{ espera|sum(attribute='gramas')|gramas }} de filamento ·
+        {{ espera|sum(attribute='custo_total')|reais }}
+        {% if fila %} · termina <span data-fila-fim>{{ fila[-1].previsao|dataHora }}</span>{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+  {% if dono and (espera|rejectattr('eh_lote')|list|length) > 1 %}
+    <form method="post" action="{{ url_for('admin_juntar') }}" id="form-juntar" class="juntar-bar">
+      <span class="small muted">{{ ic('layers') }} Para imprimir várias peças de uma vez só, clique no <b>número</b> de cada uma e depois em juntar.</span>
+      <button class="sm" id="btn-juntar" disabled>{{ ic('layers') }} <span>Juntar na mesma mesa</span></button>
+    </form>
+  {% endif %}
+  {% if espera %}
+  <div class="tq {{ 'tq-dono' if dono }}">
+    <div class="tq-cab" role="row">
+      <span>#</span><span>Peça</span><span>Amigo</span><span>Material</span>
+      <span class="n">Duração</span><span class="n">Começa</span><span class="n">Termina</span><span class="n">Custo</span><span></span>
+    </div>
+    {% for j in espera %}
+      {% set minha = meu_nome and meu_nome == j.amigo %}
+      <div class="tq-row {{ 'mine' if minha }}">
+        {% if dono and not j.eh_lote %}
+          <label class="tq-sel" title="Marcar para juntar com outras peças na mesma mesa"><input type="checkbox" name="ids" value="{{ j.id }}" form="form-juntar" aria-label="Marcar {{ j.arquivo_original }}"><div class="tq-pos">{{ loop.index }}</div></label>
+        {% else %}
+          <div class="tq-pos">{{ loop.index }}</div>
+        {% endif %}
+        <div class="tq-peca">
+          <div class="tq-thumb {{ 'mesa' if j.eh_lote }}">{% if j.eh_lote %}{{ mesa_svg(j.mesa) }}{% elif j.miniatura %}<img src="{{ url_for('miniatura', pid=j.id) }}" alt="">{% else %}{{ ic('box') }}{% endif %}</div>
+          <div class="tq-nome">
+            {% set nome = j.observacao if (j.observacao and not j.eh_lote) else j.arquivo_original %}
+            <div class="title" title="{{ nome }}"><span class="nome-arq">{{ nome }}</span>{% if minha %}<span class="tag">você</span>{% endif %}</div>
+            {% if j.eh_lote %}
+              <ul class="pecas-lote">{% for p in j.pecas %}<li title="{{ p.arquivo_original }}"><span class="nome-arq">{{ p.observacao or p.arquivo_original }}</span><span class="muted">{{ p.amigo }} · {{ p.gramas|gramas }} · {{ p.custo_total|reais }}</span></li>{% endfor %}</ul>
+            {% endif %}
+            <div class="sub">
+              {{ 'juntada' if j.eh_lote else 'enviado' }} {{ j.criado_em|relativo }}{% if j.altura_camada %} · camada {{ ('%.2f'|format(j.altura_camada)).rstrip('0').rstrip('.') }} mm{% endif %}
+              {% if dono and j.maquina and 'ender' not in j.maquina|lower %}<span class="txt-warn" title="Fatiado para {{ j.maquina }}">{{ ic('alert') }} {{ j.maquina }}</span>{% endif %}
+            </div>
+            {% if j.observacao and j.eh_lote %}<div class="nota">{{ ic('message') }} {{ j.observacao }}</div>
+            {% elif j.observacao %}<div class="arq" title="{{ j.arquivo_original }}">{{ ic('file') }}<span>{{ j.arquivo_original }}</span></div>{% endif %}
+          </div>
+        </div>
+        <div class="tq-amigo" data-label="Amigo"><span class="avatar">{% if j.eh_lote and ' + ' in j.amigo %}{{ ic('users') }}{% else %}{{ j.amigo|iniciais }}{% endif %}</span><span title="{{ j.amigo }}">{{ j.amigo }}</span></div>
+        <div class="tq-mat" data-label="Material">
+          <span class="mat-chip" title="{{ (j.rolo_codigo ~ (' · ' ~ j.rolo_descricao if j.rolo_descricao else '') ~ ' · ' ~ (j.material_nome or '')) if j.rolo_codigo else (j.material_nome or '') }}">{{ j.rolo_codigo or j.material_nome or '—' }}</span> {{ j.gramas|gramas }}
+          {% if j.sem_estoque %}<span class="txt-err" title="Faltam {{ j.falta_g|gramas }} neste rolo quando chegar a vez desta peça">{{ ic('alert') }}</span>{% endif %}
+        </div>
+        <div class="tq-num tq-dur" data-label="Duração">{{ j.tempo_s|duracao }}</div>
+        <div class="tq-num tq-ini" data-label="Começa" data-hora-ini="{{ j.id }}">{{ (j.inicio|dataHora|replace(' às', '')) if j.inicio else '—' }}</div>
+        <div class="tq-num tq-fim" data-label="Termina" data-hora-fim="{{ j.id }}">{{ j.previsao|dataHora|replace(' às', '') }}</div>
+        <div class="tq-num tq-custo" data-label="Custo" title="Material {{ j.custo_material|reais }} + energia {{ j.custo_energia|reais }}">{{ j.custo_total|reais }}</div>
+        <div class="tq-acoes">
+          {% if dono %}
+            {% if impressora.configurada %}
+              <form method="post" action="{{ url_for('imprimir', pid=j.id) }}"
+                    onsubmit='return confirm({{ ("Imprimir “" ~ j.arquivo_original ~ "” agora?\n\n✔ A mesa está limpa (sem a peça anterior)?\n✔ O rolo " ~ (j.rolo_codigo or j.material_nome or "") ~ " está na impressora?" ~ (("\n\n⚠ O rolo " ~ j.rolo.codigo ~ " tem " ~ (j.rolo.restante_g|gramas) ~ " e a peça precisa de " ~ (j.gramas|gramas) ~ ": vai acabar em ~" ~ ("%.0f"|format(j.rolo.restante_g / j.gramas * 100)) ~ "% da impressão.") if j.rolo and j.gramas and j.rolo.restante_g < j.gramas else ""))|tojson }})'>
+                <button class="sm" {{ 'disabled' if not impressora.pronta }}
+                        title="{{ 'Envia ao OctoPrint e começa a imprimir' if impressora.pronta else 'Impressora ocupada ou desconectada' }}">{{ ic('play') }} Imprimir</button></form>
+            {% else %}
+              <form method="post" action="{{ url_for('mudar_status', pid=j.id) }}">
+                <input type="hidden" name="status" value="imprimindo"><button class="sm">{{ ic('play') }} Imprimindo</button></form>
+            {% endif %}
+            <form method="post" action="{{ url_for('mover', pid=j.id, direcao='cima') }}"><button class="sm ghost icon" title="Subir na fila" aria-label="Subir" {{ 'disabled' if loop.first }}>{{ ic('up') }}</button></form>
+            <form method="post" action="{{ url_for('mover', pid=j.id, direcao='baixo') }}"><button class="sm ghost icon" title="Descer na fila" aria-label="Descer" {{ 'disabled' if loop.last }}>{{ ic('down') }}</button></form>
+            <details class="mais">
+              <summary class="btn ghost sm icon" aria-label="Mais opções">{{ ic('more') }}</summary>
+              <div class="menu">
+                <a class="btn ghost sm" href="{{ url_for('baixar', pid=j.id) }}">{{ ic('download') }} Baixar G-code</a>
+                {% if j.eh_lote %}
+                  <form method="post" action="{{ url_for('admin_desjuntar', pid=j.id) }}"><button class="ghost sm">{{ ic('layers') }} Desfazer mesa (separar as peças)</button></form>
+                {% endif %}
+                {% if impressora.configurada %}
+                  <form method="post" action="{{ url_for('mudar_status', pid=j.id) }}"><input type="hidden" name="status" value="imprimindo"><button class="ghost sm">{{ ic('play') }} Marcar imprimindo (SD)</button></form>
+                {% endif %}
+                <form method="post" action="{{ url_for('cancelar', pid=j.id) }}" onsubmit="return confirm('Cancelar este pedido?')"><button class="ghost sm txt-err">{{ ic('x') }} Cancelar pedido</button></form>
+              </div>
+            </details>
+          {% elif minha %}
+            <form method="post" action="{{ url_for('cancelar', pid=j.id) }}" onsubmit="return confirm('Cancelar o seu pedido?')">
+              <button class="sm ghost">{{ ic('x') }} Cancelar</button></form>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="empty">{{ ic('check-circle') }} Ninguém esperando na fila.</div>
+  {% endif %}
+  {% if dono %}
+  <script>
+    (function () {
+      const form = document.getElementById("form-juntar"); if (!form) return;
+      const btn = document.getElementById("btn-juntar"), rotulo = btn.querySelector("span");
+      const marcadas = () => document.querySelectorAll('.tq-sel input:checked').length;
+      document.querySelectorAll(".tq-sel input").forEach(c => c.addEventListener("change", () => {
+        const n = marcadas();
+        btn.disabled = n < 2;
+        rotulo.textContent = n < 2 ? "Juntar na mesma mesa" : `Juntar ${n} peças na mesma mesa`;
+      }));
+      form.addEventListener("submit", () => { setTimeout(() => { btn.disabled = true; }, 0); rotulo.textContent = "Juntando… (pode levar alguns segundos)"; });
+    })();
+  </script>
+  {% endif %}
+</section>
+{% endmacro %}

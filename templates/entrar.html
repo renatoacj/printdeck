@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Entrar · PrintDeck{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 380px; margin: 40px auto;">
+  <h2>👋 Bem-vindo!</h2>
+  <p class="muted small">Digite a senha da galera (peça no grupo) para usar a fila de impressão.</p>
+  <form method="post">
+    <div class="field">
+      <label for="senha">Senha da galera</label>
+      <input type="password" id="senha" name="senha" autofocus required>
+    </div>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

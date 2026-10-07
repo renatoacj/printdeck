@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% from "_agora.html" import agora with context %}
+{% block content %}
+{% from "_fila.html" import tabela_fila with context %}
+{% from "_icones.html" import ic %}
+{% set espera = fila|selectattr('status', 'equalto', 'aguardando')|list %}
+{% set i = impressora %}
+<div class="page-head">
+  <div>
+    <h1>Fila de impressão</h1>
+    <p class="sub">Mande seu G-code do Cura e veja quando sua peça fica pronta e quanto vai custar.</p>
+  </div>
+  <div class="crumbs"><a href="{{ url_for('fila') }}">PrintDeck</a><span class="sep">›</span><span class="atual">Fila de impressão</span></div>
+</div>
+
+<div class="strip">
+  <span><b>{{ espera|length }}</b> na fila</span>
+  <span><b>{{ espera|sum(attribute='tempo_s')|duracao if espera else '0 min' }}</b> de impressão esperando</span>
+  {% if fila %}<span>fila termina <b>{{ fila[-1].previsao|dataHora|replace(' às', '') }}</b></span>{% endif %}
+  <div class="dir">
+    {% if i.configurada %}<span class="st"><span class="dot {{ 'on' if i.conectada else ('err' if i.online is sameas false else 'off') }}"></span>Impressora {{ 'online' if i.conectada else 'offline' }}</span>{% endif %}
+  </div>
+</div>
+
+<div class="fila-page">
+  {{ agora(fila, impressora, classe='a-now') }}
+
+  <section class="card a-env" id="enviar">
+    <div class="card-head linha"><div><h2>{{ ic('upload') }} Enviar arquivo</h2><div class="sub2">pode mandar mais de um de uma vez</div></div></div>
+    <form action="{{ url_for('enviar') }}" method="post" enctype="multipart/form-data" id="form-envio">
+      <div class="field">
+        <label class="drop" id="drop">
+          <input type="file" name="gcode" id="gcode" accept=".gcode,.gco,.g" multiple required>
+          <span class="drop-ico">{{ ic('upload') }}</span>
+          <strong id="drop-label">Toque ou arraste os .gcode aqui</strong>
+          <span class="muted small">No Cura: fatiar → “Salvar no disco” · pode escolher vários arquivos</span>
+        </label>
+      </div>
+      <label class="juntar-op" id="juntar-op" hidden>
+        <input type="checkbox" name="juntar" value="1" checked>
+        <span><b>Imprimir todas juntas na mesma mesa</b><br><span class="muted small">O programa encaixa as peças lado a lado e imprime de uma vez. Se não couberem (ou forem de fatiamentos diferentes), entram na fila separadas.</span></span>
+      </label>
+      <div class="row">
+        <div class="field">
+          <label for="amigo">Seu nome</label>
+          {# lista própria (e não <datalist>): o datalist do navegador esconde os nomes que não batem com o que já está escrito #}
+          <div class="combo" id="combo-amigo">
+            <input type="text" id="amigo" name="amigo" required maxlength="40" value="{{ meu_nome }}" placeholder="Ex.: João" autocomplete="off"
+                   role="combobox" aria-expanded="false" aria-controls="lista-amigos" aria-autocomplete="list">
+            <button type="button" class="combo-seta" tabindex="-1" aria-label="Ver quem já imprimiu">{{ ic('down') }}</button>
+            <ul class="combo-lista" id="lista-amigos" role="listbox" hidden>
+              {% for a in amigos %}<li role="option" data-v="{{ a }}"><span class="avatar">{{ a|iniciais }}</span><span>{{ a }}</span></li>{% endfor %}
+            </ul>
+          </div>
+          <style>
+            .combo { position: relative; }
+            .combo input { padding-right: 38px; }
+            .combo .combo-seta { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; padding: 0; display: grid; place-items: center; background: none; border: 0; box-shadow: none; color: var(--muted); border-radius: 6px; cursor: pointer; }
+            .combo .combo-seta:hover { background: var(--surface-2); color: var(--text); }
+            .combo .combo-seta .i { width: 16px; height: 16px; }
+            .combo-lista { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; max-height: 240px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .18); }
+            .combo-lista[hidden] { display: none; }
+            .combo-lista li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+            .combo-lista li:hover, .combo-lista li.ativo { background: var(--accent-soft); }
+            .combo-lista li[hidden] { display: none; }
+            .combo-lista .avatar { width: 26px; height: 26px; font-size: 10px; flex: none; }
+            .combo-lista .vazio { color: var(--muted); cursor: default; font-size: 13px; }
+          </style>
+        </div>
+        {% if rolos %}
+          <div class="field">
+            <label for="rolo_id">Rolo de filamento</label>
+            <select id="rolo_id" name="rolo_id" required>
+              {% for r in rolos %}
+                <option value="{{ r.id }}" data-sobra="{{ '%.0f'|format(r.sobra) }}">{{ r.codigo }}{% if r.descricao %} · {{ r.descricao }}{% endif %} · {{ r.material_nome }} · {{ r.restante_g|gramas }}</option>
+              {% endfor %}
+            </select>
+            <div class="small muted" id="rolo-dica"></div>
+          </div>
+        {% else %}
+          <div class="field">
+            <label for="material_id">Material</label>
+            <select id="material_id" name="material_id">
+              {% for m in materiais %}<option value="{{ m.id }}">{{ m.nome }} · {{ m.preco_kg|reais }}/kg</option>{% endfor %}
+            </select>
+          </div>
+        {% endif %}
+      </div>
+      <div class="field">
+        <label for="observacao">Nome da impressão <span class="muted">(opcional: o que é, cor, prazo…)</span></label>
+        <textarea id="observacao" name="observacao" maxlength="300" rows="2"></textarea>
+      </div>
+      <button type="submit" id="btn-enviar" class="block">Colocar na fila</button>
+    </form>
+  </section>
+
+  {{ tabela_fila(fila, classe='a-fila') }}
+
+  <section class="card a-rec">
+    <div class="card-head linha"><div><h2>{{ ic('history') }} Últimas finalizadas</h2><div class="sub2">as 10 mais recentes</div></div></div>
+    {% for r in recentes %}
+      <div class="lst-row">
+        <span class="doc-ico st-{{ r.status }}">{{ ic({'concluida': 'check', 'falhou': 'x', 'cancelada': 'ban'}.get(r.status, 'file')) }}</span>
+        <div>
+          <div class="t" title="{{ r.arquivo_original }}">{{ r.observacao or r.arquivo_original }}</div>
+          <div class="s">{% if r.observacao %}{{ r.arquivo_original }} · {% endif %}{{ r.amigo }} · {{ r.tempo_s|duracao }} · {{ r.gramas|gramas }} · <span class="{{ 'txt-err' if r.status == 'falhou' else '' }}">{{ STATUS_LABELS[r.status] }}{% if r.status == 'falhou' and r.falhou_em_pct is not none %} em {{ '%.0f'|format(r.falhou_em_pct) }}%{% endif %}</span></div>
+        </div>
+        <div class="v">{{ r.custo_total|reais }}<small>{{ r.finalizado_em|dataCurta }}</small></div>
+      </div>
+    {% else %}
+      <div class="empty">Nada finalizado ainda.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AO_VIVO = {
+    status: "{{ url_for('status_json') }}",
+    gcode: "{{ url_for('gcode', pid=0)[:-7] }}",  {# "/gcode/0.gcode" -> "/gcode/" #}
+    visualizador: "{{ url_for('static', filename='visualizador.js') }}?v={{ versao_estatica }}",
+    fila: {{ fila|map(attribute='id')|list|tojson }},
+  };
+</script>
+<script src="{{ url_for('static', filename='ao_vivo.js') }}?v={{ versao_estatica }}"></script>
+<script>
+  const drop = document.getElementById('drop'), input = document.getElementById('gcode'),
+        label = document.getElementById('drop-label');
+  const show = () => {
+    const n = input.files.length;
+    if (n) { label.textContent = n === 1 ? input.files[0].name : `${n} arquivos: ` + [...input.files].map(f => f.name).join(', '); drop.classList.add('tem'); }
+    document.getElementById('juntar-op').hidden = n < 2;
+  };
+  input.addEventListener('change', show);
+  ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('hover'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, () => drop.classList.remove('hover')));
+  drop.addEventListener('drop', ev => { ev.preventDefault(); input.files = ev.dataTransfer.files; show(); });
+  // lista de quem já imprimiu: abre com TODOS os nomes; só filtra enquanto a pessoa digita
+  (function () {
+    const campo = document.getElementById('amigo'), lista = document.getElementById('lista-amigos'),
+          seta = document.querySelector('#combo-amigo .combo-seta'), itens = [...lista.querySelectorAll('li')];
+    if (!itens.length) { seta.hidden = true; return; }
+    let ativo = -1;
+    const visiveis = () => itens.filter(li => !li.hidden);
+    const marcar = i => { const v = visiveis(); itens.forEach(li => li.classList.remove('ativo')); ativo = v.length ? (i + v.length) % v.length : -1; if (ativo >= 0) { v[ativo].classList.add('ativo'); v[ativo].scrollIntoView({ block: 'nearest' }); } };
+    const abrir = filtro => {
+      const t = (filtro || '').trim().toLowerCase();
+      itens.forEach(li => { li.hidden = !!t && !li.dataset.v.toLowerCase().includes(t); });
+      if (!visiveis().length) { fechar(); return; }
+      lista.hidden = false; campo.setAttribute('aria-expanded', 'true'); marcar(-1); ativo = -1; itens.forEach(li => li.classList.remove('ativo'));
+    };
+    const fechar = () => { lista.hidden = true; campo.setAttribute('aria-expanded', 'false'); ativo = -1; };
+    const escolher = li => { campo.value = li.dataset.v; fechar(); campo.dispatchEvent(new Event('change', { bubbles: true })); };
+    seta.addEventListener('mousedown', e => { e.preventDefault(); lista.hidden ? (abrir(''), campo.focus()) : fechar(); });
+    campo.addEventListener('click', () => { if (lista.hidden) abrir(''); });
+    campo.addEventListener('input', () => abrir(campo.value));
+    campo.addEventListener('blur', () => setTimeout(fechar, 120));
+    campo.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (lista.hidden) abrir(''); marcar(ativo + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (!lista.hidden) marcar(ativo - 1); }
+      else if (e.key === 'Enter' && !lista.hidden && ativo >= 0) { e.preventDefault(); escolher(visiveis()[ativo]); }
+      else if (e.key === 'Escape') fechar();
+    });
+    itens.forEach(li => li.addEventListener('mousedown', e => { e.preventDefault(); escolher(li); }));
+  })();
+  const seletorRolo = document.getElementById('rolo_id');
+  if (seletorRolo) {
+    const dica = () => {
+      const o = seletorRolo.selectedOptions[0], g = Number(o.dataset.sobra);
+      document.getElementById('rolo-dica').textContent = g > 0
+        ? `Livre neste rolo depois das peças da fila: ~${g} g`
+        : 'Este rolo já está comprometido com a fila. Combine com o dono.';
+    };
+    seletorRolo.addEventListener('change', dica); dica();
+  }
+  document.getElementById('form-envio').addEventListener('submit', () => {
+    const b = document.getElementById('btn-enviar'); b.disabled = true; b.textContent = 'Enviando…';
+  });
+</script>
+{% endblock %}

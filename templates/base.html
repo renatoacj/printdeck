@@ -1,0 +1,153 @@
+{% from "_icones.html" import ic, sprite %}<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)">
+  <title>{% block title %}PrintDeck · Fila de impressão 3D{% endblock %}</title>
+  <script>
+    // tema e menu lateral escolhidos por quem está vendo (antes de desenhar, para não piscar)
+    try {
+      const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t;
+      const l = localStorage.getItem("lateral"); if (l) document.documentElement.dataset.lateral = l;
+    } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='hub.css') }}?v={{ versao_estatica }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='app/icone-192.png') }}">
+  {# aplicativo instalável (Android: Chrome > Instalar app) #}
+  <link rel="manifest" href="{{ url_for('static', filename='app/manifest.webmanifest') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='app/icone-apple-180.png') }}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="PrintDeck">
+  <script type="importmap">
+    {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                 "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+  </script>
+</head>
+<body>
+  {{ sprite() }}
+  {% set pagina = 'fila' if request.endpoint == 'fila' else 'dashboard' if request.endpoint == 'dashboard'
+                  else 'dono' if request.endpoint and request.endpoint.startswith('admin') else '' %}
+  {% set i_top = impressora %}
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="side-brand" href="{{ url_for('fila') }}">
+        <span class="logo">{{ ic('printer') }}</span>
+        <span><b>PrintDeck</b><small>fila de impressão 3D</small></span>
+      </a>
+      <div class="side-scroll">
+        <div class="side-sec">Menu</div>
+        <nav class="side-nav" aria-label="Menu">
+          <a href="{{ url_for('fila') }}" title="Fila de impressão" class="{{ 'on' if pagina == 'fila' }}">{{ ic('list') }}<span>Fila de impressão</span></a>
+          <a href="{{ url_for('dashboard') }}" title="Dashboard" class="{{ 'on' if pagina == 'dashboard' }}">{{ ic('chart') }}<span>Dashboard</span></a>
+          <a href="{{ url_for('admin') }}" title="Administrativo" class="{{ 'on' if pagina == 'dono' }}">{{ ic('key') }}<span>Administrativo</span></a>
+        </nav>
+        {% if is_admin %}
+          <div class="side-sec">Gestão</div>
+          <nav class="side-nav" aria-label="Gestão">
+            <a href="{{ url_for('admin') }}#historico" title="Histórico">{{ ic('history') }}<span>Histórico</span></a>
+            <a href="{{ url_for('admin') }}#rolos" title="Filamentos">{{ ic('spool') }}<span>Filamentos</span></a>
+            <a href="{{ url_for('admin') }}#config" title="Configurações">{{ ic('sliders') }}<span>Configurações</span></a>
+            <a href="{{ url_for('admin_logout') }}" title="Sair do administrativo">{{ ic('logout') }}<span>Sair do administrativo</span></a>
+          </nav>
+        {% endif %}
+      </div>
+      <div class="side-status" id="side-status" data-url="{{ url_for('status_json') }}" hidden>
+        <div class="side-status-head"><span class="dot off" id="ss-dot"></span><span id="ss-texto">…</span></div>
+        <div id="ss-job" hidden>
+          <div class="ss-nome" id="ss-nome"></div>
+          <div class="progress"><div id="ss-barra" style="width:0%"></div></div>
+          <div class="ss-linha"><span id="ss-pct">0%</span><span id="ss-falta"></span></div>
+        </div>
+        <div class="ss-fila" id="ss-fila"></div>
+      </div>
+      <button type="button" class="side-toggle" id="side-toggle" title="Recolher ou abrir o menu" aria-label="Recolher ou abrir o menu"><svg class="i" aria-hidden="true" style="transform: rotate(-90deg)"><use href="#i-up"/></svg></button>
+    </aside>
+
+    <div class="content">
+      <header class="topbar">
+        <div class="workspace" title="Impressora">
+          <span class="dot {{ ('on' if i_top.conectada else ('err' if i_top.online is sameas false else 'off')) if i_top.configurada else 'on' }}"></span>
+          <b>Ender 3 Pro</b>
+          <span class="sep"></span>
+          <span class="muted">{{ (i_top.texto if i_top.online else 'OctoPrint sem contato') if i_top.configurada else 'pelo cartão microSD' }}</span>
+        </div>
+        <div class="top-dir">
+          <button type="button" class="icon-btn" id="tema-btn" title="Alternar tema claro/escuro" aria-label="Alternar tema claro ou escuro">{{ ic('sun') }}</button>
+          {% if is_admin %}
+            {% if atencao is defined %}
+              <details class="atencao">
+                <summary class="atencao-btn {{ 'zero' if not atencao }}">{{ ic('bell') }}<span class="txt">Pendências</span><span class="qtd">{{ atencao|length }}</span></summary>
+                <div class="atencao-painel">
+                  <h3>Pendências</h3>
+                  {% for nivel, titulo, detalhe, aba in atencao %}
+                    <a class="aviso-item {{ nivel }}" href="#{{ aba }}" data-ir-aba="{{ aba }}">{{ ic('alert') }}<div><b>{{ titulo }}</b><span>{{ detalhe }}</span></div></a>
+                  {% else %}
+                    <div class="aviso-item"><span class="txt-ok">{{ ic('check-circle') }}</span><div><b>Tudo em ordem</b><span>Nenhuma pendência agora.</span></div></div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% else %}
+              <a class="atencao-btn zero" href="{{ url_for('admin') }}">{{ ic('bell') }}<span class="txt">Pendências</span></a>
+            {% endif %}
+          {% endif %}
+          <a class="avatar-top" href="{{ url_for('admin') if is_admin else url_for('fila') }}"
+             title="{{ 'Você está no administrativo' if is_admin else (meu_nome or 'Visitante') }}">{{ 'AD' if is_admin else (meu_nome|iniciais if meu_nome else '?') }}</a>
+        </div>
+      </header>
+      <main class="wrap">
+        {% with msgs = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  <div class="instalar" id="instalar" hidden>
+    <img src="{{ url_for('static', filename='app/icone-192.png') }}" alt="" width="36" height="36">
+    <div><b>Instalar o PrintDeck</b><span>vira um aplicativo no seu celular</span></div>
+    <button type="button" id="instalar-sim">Instalar</button>
+    <button type="button" class="ghost icon" id="instalar-nao" aria-label="Agora não">{{ ic('x') }}</button>
+  </div>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("{{ url_for('sw') }}").catch(() => {});
+    (function () {
+      const faixa = document.getElementById("instalar"); let convite = null;
+      const dispensado = () => { try { return localStorage.getItem("instalar-nao") === "1"; } catch (e) { return false; } };
+      addEventListener("beforeinstallprompt", e => { e.preventDefault(); convite = e; if (!dispensado()) faixa.hidden = false; });
+      addEventListener("appinstalled", () => { faixa.hidden = true; });
+      document.getElementById("instalar-sim").addEventListener("click", async () => { if (!convite) return; faixa.hidden = true; convite.prompt(); convite = null; });
+      document.getElementById("instalar-nao").addEventListener("click", () => { faixa.hidden = true; try { localStorage.setItem("instalar-nao", "1"); } catch (e) {} });
+    })();
+  </script>
+  <nav class="tabbar" aria-label="Navegação">
+    <a href="{{ url_for('fila') }}" class="{{ 'on' if pagina == 'fila' }}">{{ ic('list') }}Fila</a>
+    <a href="{{ url_for('dashboard') }}" class="{{ 'on' if pagina == 'dashboard' }}">{{ ic('chart') }}Dashboard</a>
+    <a href="{{ url_for('admin') }}" class="{{ 'on' if pagina == 'dono' }}">{{ ic('key') }}Admin</a>
+  </nav>
+  <script>
+    (function () {
+      const raiz = document.documentElement;
+      const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+      document.getElementById("tema-btn").addEventListener("click", () => {
+        const escuro = raiz.dataset.theme ? raiz.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+        raiz.dataset.theme = escuro ? "light" : "dark";
+        salvar("tema", raiz.dataset.theme);
+        dispatchEvent(new Event("tema"));
+      });
+      document.getElementById("side-toggle").addEventListener("click", () => {
+        const recolhida = getComputedStyle(raiz).getPropertyValue("--side-w").trim() === "68px";
+        raiz.dataset.lateral = recolhida ? "aberta" : "recolhida";
+        salvar("lateral", raiz.dataset.lateral);
+      });
+    })();
+  </script>
+  <script src="{{ url_for('static', filename='lateral.js') }}?v={{ versao_estatica }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

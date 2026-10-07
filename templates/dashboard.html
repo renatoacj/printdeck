@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · PrintDeck{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="sub">Tudo às claras: quem usou quanto e quanto custou (impressões concluídas e falhas marcadas para cobrança).</p>
+  </div>
+  <div class="crumbs"><a href="{{ url_for('fila') }}">PrintDeck</a><span class="sep">›</span><span class="atual">Dashboard</span></div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="k">Gasto total</div><div class="v">{{ tot.gasto_total|reais }}</div>
+    <div class="d">{% if tot.em_impressao %}inclui {{ tot.em_impressao|reais }} em impressão · {% endif %}material {{ tot.custo_material|reais }} · energia {{ tot.custo_energia|reais }}</div></div>
+  <div class="stat"><div class="k">Horas de impressão</div><div class="v">{{ tot.tempo_s|duracao }}</div>
+    <div class="d">{{ tot.concluidas }} concluída{{ 's' if tot.concluidas != 1 }} · {{ tot.falhas }} falha{{ 's' if tot.falhas != 1 }}</div></div>
+  <div class="stat"><div class="k">Filamento usado</div>
+    <div class="v"><span data-g-base="{{ tot.gramas }}">{{ ('%.1f'|format(tot.gramas + (tot.gramas_agora or 0)))|replace('.', ',') if tot.gramas_agora else tot.gramas|gramas }}{{ ' g' if tot.gramas_agora }}</span></div>
+    <div class="d">{% if tot.gramas_agora %}inclui <span data-g-agora>{{ ('%.1f'|format(tot.gramas_agora))|replace('.', ',') }} g</span> da impressão em andamento{% if tot.gramas_falhas %} · {% endif %}{% endif %}{% if tot.gramas_falhas %}{{ tot.gramas_falhas|gramas }} em falhas{% endif %}{% if tot.perdas %} · perdas não cobradas {{ tot.perdas|reais }}{% endif %}&nbsp;</div></div>
+  <div class="stat"><div class="k">Na fila</div><div class="v">{{ tot.na_fila }}</div>
+    <div class="d">{{ tot.tempo_fila|duracao }} · previsto {{ tot.previsto|reais }}</div></div>
+</div>
+
+{% if rolos is defined and rolos %}
+<div class="card">
+  <div class="card-head linha"><div><h2>Filamentos</h2><div class="sub2">quanto ainda tem em cada rolo</div></div></div>
+  <div class="filamentos">
+    {% for r in rolos %}
+      {% set saindo = r.gramas_agora or 0 %}
+      {% set agora = [r.restante_g - saindo, 0]|max %}
+      {% set pct = [100, agora / r.peso_inicial_g * 100 if r.peso_inicial_g else 0]|min %}
+      <div class="filamento {{ 'em-uso' if r.em_uso }}">
+        <div class="top">
+          <span><span class="cod">{{ r.codigo }}</span> <span class="muted small">{{ r.material_nome }}{% if r.descricao %} · {{ r.descricao }}{% endif %}</span></span>
+          {% if r.em_uso %}<span class="pill imprimindo">em uso</span>{% endif %}
+        </div>
+        <div class="qtd"><b {% if r.em_uso %}data-rolo-restante="{{ r.restante_g }}"{% endif %}>{{ ('%.1f'|format(agora))|replace('.', ',') ~ ' g' if r.em_uso else agora|gramas }}</b> <span class="muted">de {{ r.peso_inicial_g|gramas }}</span><span class="pct" {% if r.em_uso %}data-rolo-pct="{{ r.restante_g }}" data-rolo-peso="{{ r.peso_inicial_g }}"{% endif %}>{{ '%.0f'|format(pct) }}%</span></div>
+        <div class="est-barra {{ 'falta' if r.falta }}" title="{{ '%.0f'|format(pct) }}% do rolo"><div {% if r.em_uso %}data-rolo-barra="{{ r.restante_g }}" data-rolo-peso="{{ r.peso_inicial_g }}"{% endif %} style="width: {{ pct }}%"></div></div>
+        <div class="small {{ 'txt-err' if r.falta else 'muted' }}">
+          {{ '%.0f'|format(pct) }}% do rolo{% if r.em_uso %} · <span data-g-agora>{{ ('%.1f'|format(saindo))|replace('.', ',') }} g</span> já saíram na impressão atual{% endif %}{% if r.fila_precisa %} · a fila vai usar {{ r.fila_precisa|gramas }}{% endif %}{% if r.falta %} · não dá para a fila toda{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% macro ranking(titulo, itens, fmt) %}
+<div class="card">
+  <div class="card-head linha"><h2>{{ titulo }}</h2></div>
+  {% if itens %}
+  <div class="bars">
+    {% for i in itens %}
+    <div class="bar-row" title="{{ i.amigo }}: {{ fmt(i.valor) }}">
+      <div class="name">{{ i.amigo }}</div>
+      <div class="bar-track">
+        <div class="bar" style="width: {{ i.pct * 0.7 }}%"></div>
+        <span class="bar-val">{{ fmt(i.valor) }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty">Sem dados ainda.</div>{% endif %}
+</div>
+{% endmacro %}
+
+<div class="grid3">
+  {{ ranking("Quem mais gastou", rank_gasto, f_reais) }}
+  {{ ranking("Quem mais usou a impressora", rank_tempo, f_duracao) }}
+  {{ ranking("Quem mais usou filamento", rank_gramas, f_gramas) }}
+</div>
+
+<div class="card">
+  <div class="card-head linha"><h2>Gastos por amigo</h2></div>
+  {% if por_amigo %}
+  <div class="table-wrap">
+    <table class="resp">
+      <thead><tr>
+        <th>Amigo</th><th class="n">Impressões</th><th class="n">Tempo</th><th class="n">Filamento</th>
+        <th class="n">Material</th><th class="n">Energia</th><th class="n">Em impressão</th><th class="n">Total gasto</th><th class="n">% do total</th>
+        <th class="n">Na fila (previsto)</th>
+      </tr></thead>
+      <tbody>
+      {% for a in por_amigo %}
+        <tr>
+          <td class="t">{{ a.amigo }}</td>
+          <td class="n" data-label="Impressões">
+            <div>{% if a.imprimindo %}<span class="pill imprimindo">imprimindo</span> {% endif %}{{ a.concluidas }}</div>
+            {% if a.falhas %}<div class="small txt-err" title="O que as falhas gastaram">{{ a.falhas }} falha{{ 's' if a.falhas > 1 }} · {{ a.gramas_falhas|gramas }} · {{ a.custo_falhas|reais }}</div>{% endif %}
+          </td>
+          <td class="n" data-label="Tempo">{{ a.tempo_s|duracao }}</td>
+          <td class="n" data-label="Filamento">
+            {% if a.gramas_agora %}
+              <div><strong data-g-base="{{ a.gramas }}">{{ ('%.1f'|format(a.gramas + a.gramas_agora))|replace('.', ',') }} g</strong></div>
+              <div class="small muted"><span data-g-agora>{{ ('%.1f'|format(a.gramas_agora))|replace('.', ',') }} g</span> imprimindo agora</div>
+            {% else %}{{ a.gramas|gramas }}{% endif %}
+          </td>
+          <td class="n" data-label="Material">{{ a.custo_material|reais }}</td>
+          <td class="n" data-label="Energia">{{ a.custo_energia|reais }}</td>
+          <td class="n" data-label="Em impressão">{% if a.em_impressao %}{{ a.em_impressao|reais }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="n" data-label="Total gasto"><strong>{{ a.gasto_total|reais }}</strong></td>
+          <td class="n" data-label="% do total">{{ '%.0f'|format((a.gasto_total or 0) / tot.gasto_total * 100 if tot.gasto_total else 0) }}%</td>
+          <td class="n" data-label="Na fila">{% if a.na_fila %}{{ a.na_fila }} · {{ a.previsto|reais }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+        <tr class="total">
+          <td class="t">Total</td><td class="n" data-label="Impressões">{{ tot.concluidas }}{% if tot.falhas %}<div class="small txt-err">{{ tot.falhas }} falha{{ 's' if tot.falhas > 1 }} · {{ tot.gramas_falhas|gramas }} · {{ tot.custo_falhas|reais }}</div>{% endif %}</td><td class="n" data-label="Tempo">{{ tot.tempo_s|duracao }}</td>
+          <td class="n" data-label="Filamento"><span data-g-base="{{ tot.gramas }}">{% if tot.gramas_agora %}{{ ('%.1f'|format(tot.gramas + tot.gramas_agora))|replace('.', ',') }} g{% else %}{{ tot.gramas|gramas }}{% endif %}</span></td><td class="n" data-label="Material">{{ tot.custo_material|reais }}</td>
+          <td class="n" data-label="Energia">{{ tot.custo_energia|reais }}</td><td class="n" data-label="Em impressão">{{ tot.em_impressao|reais }}</td><td class="n" data-label="Total gasto">{{ tot.gasto_total|reais }}</td><td class="n" data-label="% do total">100%</td>
+          <td class="n" data-label="Na fila">{{ tot.previsto|reais }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">Ninguém imprimiu ainda.</div>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card-head linha"><h2>Histórico de impressões</h2></div>
+  {% if historico %}
+  <div class="table-wrap">
+    <table class="resp">
+      <thead><tr><th>Arquivo</th><th>Data</th><th>Amigo</th><th>Status</th><th class="n">Tempo</th>
+        <th class="n">Filamento</th><th class="n">Material</th><th class="n">Energia</th><th class="n">Total</th></tr></thead>
+      <tbody>
+      {% for h in historico %}
+        <tr>
+          <td class="t">{{ h.arquivo_original }}</td>
+          <td class="num" data-label="Data">{{ h.finalizado_em|dataCurta }}</td>
+          <td data-label="Amigo">{{ h.amigo }}</td>
+          <td data-label="Status"><span class="pill {{ h.status }}">{{ STATUS_LABELS[h.status] }}{% if h.status == 'falhou' and h.falhou_em_pct is not none %} em {{ '%.0f'|format(h.falhou_em_pct) }}%{% endif %}</span>{% if not h.cobrar %} <span class="small muted">não cobrada</span>{% endif %}</td>
+          <td class="n" data-label="Tempo">{{ h.tempo_s|duracao }}</td>
+          <td class="n" data-label="Filamento">{{ h.gramas|gramas }} {{ h.material_nome or '' }}</td>
+          <td class="n" data-label="Material">{{ h.custo_material|reais }}</td>
+          <td class="n" data-label="Energia">{{ h.custo_energia|reais }}</td>
+          <td class="n" data-label="Total"><strong>{{ h.custo_total|reais }}</strong></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">Nenhuma impressão finalizada ainda.</div>{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // filamento da impressão em andamento, atualizado a cada 5 s
+  (function () {
+    if (!document.querySelector("[data-g-agora], [data-rolo-restante]")) return;
+    // ao vivo com uma casa decimal, para ver o filamento subindo enquanto imprime
+    const fmt = g => g >= 1000 ? (g / 1000).toFixed(3).replace(".", ",") + " kg" : g.toFixed(1).replace(".", ",") + " g";
+    async function atualizar() {
+      const d = await fetch("{{ url_for('status_json') }}", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (!d) return;
+      if (!d.atual) { location.reload(); return; }   // a impressão terminou: recarrega com os números finais
+      const g = d.atual.gramas_agora || 0;
+      document.querySelectorAll("[data-g-agora]").forEach(el => { el.textContent = fmt(g); });
+      document.querySelectorAll("[data-g-base]").forEach(el => { el.textContent = fmt(Number(el.dataset.gBase) + g); });
+      // o rolo em uso vai baixando conforme o filamento sai
+      document.querySelectorAll("[data-rolo-restante]").forEach(el => { el.textContent = fmt(Math.max(0, Number(el.dataset.roloRestante) - g)); });
+      document.querySelectorAll("[data-rolo-pct]").forEach(el => {
+        el.textContent = Math.round(Math.max(0, Math.min(100, (Number(el.dataset.roloPct) - g) / Number(el.dataset.roloPeso) * 100))) + "%";
+      });
+      document.querySelectorAll("[data-rolo-barra]").forEach(el => {
+        el.style.width = Math.max(0, Math.min(100, (Number(el.dataset.roloBarra) - g) / Number(el.dataset.roloPeso) * 100)) + "%";
+      });
+    }
+    setInterval(() => { if (!document.hidden) atualizar(); }, 5000);
+  })();
+</script>
+{% endblock %}

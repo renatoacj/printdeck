@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+{% from "_agora.html" import agora with context %}
+{% from "_fila.html" import tabela_fila with context %}
+{% from "_icones.html" import ic %}
+{% block title %}Administrativo{% endblock %}
+
+{% macro delta(v) -%}
+  {%- if v is not none -%}<span class="delta {{ 'sobe' if v > 0.5 else ('desce' if v < -0.5 else 'neutro') }}">{{ '+' if v > 0 }}{{ '%.1f'|format(v)|replace('.', ',') }}%</span>{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+{% set i = impressora %}
+{% set espera = fila|selectattr('status', 'equalto', 'aguardando')|list %}
+{% set atual = fila|selectattr('status', 'equalto', 'imprimindo')|first %}
+{% set proxima = espera|first %}
+<div class="page-head">
+  <div>
+    <h1>Administrativo</h1>
+    <p class="sub">{% if i.configurada %}Confira a mesa e clique em “Imprimir”: progresso e conclusão são automáticos.{% else %}Baixe o G-code para o microSD, marque “Imprimindo” ao começar e “Concluída” ao terminar.{% endif %}</p>
+  </div>
+  <div class="crumbs"><a href="{{ url_for('fila') }}">PrintDeck</a><span class="sep">›</span><a href="{{ url_for('admin') }}">Administrativo</a><span class="sep">›</span><span class="atual" id="crumb-aba">Visão geral</span></div>
+</div>
+
+<div class="toolbar">
+  <div class="seg" role="tablist">
+    <button type="button" class="on" data-aba="geral" role="tab">Visão geral</button>
+    <button type="button" data-aba="historico" role="tab">Histórico <span class="qtd">{{ finalizadas|length }}</span></button>
+    <button type="button" data-aba="config" role="tab">Configurações</button>
+  </div>
+  <span class="info">{{ espera|length }} na fila · {{ painel.fila_tempo|duracao if espera else 'nada esperando' }}{% if painel.fila_fim %} · termina {{ painel.fila_fim|dataHora|replace(' às', '') }}{% endif %}</span>
+  <div class="dir">
+    {% if proxima %}
+      {% if i.configurada %}
+        <form method="post" action="{{ url_for('imprimir', pid=proxima.id) }}" style="display:contents"
+              onsubmit='return confirm({{ ("Imprimir a próxima da fila, “" ~ proxima.arquivo_original ~ "” de " ~ proxima.amigo ~ "?\n\n✔ A mesa está limpa?\n✔ O rolo " ~ (proxima.rolo_codigo or proxima.material_nome or "") ~ " está na impressora?" ~ (("\n\n⚠ O rolo " ~ proxima.rolo.codigo ~ " tem " ~ (proxima.rolo.restante_g|gramas) ~ " e a peça precisa de " ~ (proxima.gramas|gramas) ~ ": vai acabar em ~" ~ ("%.0f"|format(proxima.rolo.restante_g / proxima.gramas * 100)) ~ "% da impressão.") if proxima.rolo and proxima.gramas and proxima.rolo.restante_g < proxima.gramas else ""))|tojson }})'>
+          <button {{ 'disabled' if not i.pronta }} title="{{ 'Envia a próxima da fila ao OctoPrint' if i.pronta else 'A impressora está ocupada ou desconectada' }}">{{ ic('play') }} Imprimir próxima</button></form>
+      {% else %}
+        <form method="post" action="{{ url_for('mudar_status', pid=proxima.id) }}" style="display:contents">
+          <input type="hidden" name="status" value="imprimindo"><button {{ 'disabled' if atual }}>{{ ic('play') }} Marcar próxima como imprimindo</button></form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if senha_padrao %}
+  <div class="flash aviso">{{ ic('alert') }} A senha ainda é a padrão (<strong>admin</strong>). Troque em <a href="#custos" data-ir-aba="custos">Configurações → Custos e senhas</a>.</div>
+{% endif %}
+
+{# =================== VISÃO GERAL =================== #}
+<section data-aba-sec="geral">
+  <div class="strip">
+    <span><b>{{ espera|length }}</b> na fila</span>
+    <span><b>{{ painel.fila_gramas|gramas }}</b> de filamento previsto</span>
+    <span><b>{{ painel.mes.n }}</b> impress{{ 'ão' if painel.mes.n == 1 else 'ões' }} em {{ painel.nome_mes }}</span>
+    <div class="dir">
+      {% if i.configurada %}<span class="st"><span class="dot {{ 'on' if i.conectada else ('err' if i.online is sameas false else 'off') }}"></span>OctoPrint {{ 'online' if i.conectada else ('sem contato' if i.online is sameas false else 'sem impressora') }}</span>{% endif %}
+      <span class="st"><span class="dot {{ 'on' if tunel.ligado and tunel.url else 'off' }}"></span>Link {{ 'no ar' if tunel.ligado else 'desligado' }}</span>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-k">Impressões no mês</div>
+      <div class="kpi-v">{{ painel.mes.n }} {{ delta(painel.variacao.n) }}</div>
+      <div class="kpi-d">{% if painel.mes.falhas %}{{ painel.mes.falhas }} falha{{ 's' if painel.mes.falhas > 1 }} · {% endif %}{{ painel.mes_anterior.n }} no mês passado</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-k">Horas impressas</div>
+      <div class="kpi-v"><span data-mes="tempo">{{ painel.mes.tempo|duracao if painel.mes.tempo else '0h' }}</span> {{ delta(painel.variacao.tempo) }}</div>
+      <div class="kpi-d">{% if atual %}inclui <span data-mes="andamento">{{ painel.andamento_tempo|duracao }}</span> da impressão atual · {% endif %}fila: {{ painel.fila_tempo|duracao if espera else 'vazia' }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-k">Filamento usado</div>
+      <div class="kpi-v"><span data-mes="gramas">{{ painel.mes.gramas|gramas }}</span> {{ delta(painel.variacao.gramas) }}</div>
+      <div class="kpi-d">{% if atual %}inclui o que já saiu na impressão atual · {% endif %}a fila vai usar {{ painel.fila_gramas|gramas }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-k">Gasto do mês</div>
+      <div class="kpi-v">{{ painel.mes.gasto|reais }} {{ delta(painel.variacao.gasto) }}</div>
+      <div class="kpi-d">{% if painel.imprimindo_custo %}+ {{ painel.imprimindo_custo|reais }} em impressão · {% endif %}<a href="{{ url_for('dashboard') }}">ver por amigo →</a></div>
+    </div>
+  </div>
+
+  {% if atencao %}
+    {% set a0 = atencao[0] %}
+    <div class="acao {{ a0[0] }}">
+      <span class="rot">{{ ic('alert') }} ATENÇÃO</span>
+      <span class="txt">{{ a0[1] }}</span>
+      {% if atencao|length > 1 %}<span class="mais-txt">e mais {{ atencao|length - 1 }} pendência{{ 's' if atencao|length > 2 }}</span>{% endif %}
+      <div class="dir"><button type="button" class="sm ghost" id="ver-pendencias">Ver todas</button></div>
+    </div>
+  {% endif %}
+
+  <div class="grade l-2-1">
+    {{ agora(fila, impressora, dono=True) }}
+    <section class="card">
+      <div class="card-head linha">
+        <div><h2>Amigos em {{ painel.nome_mes }}</h2><div class="sub2">ordenado por gasto no mês</div></div>
+      </div>
+      {% for a in painel.amigos_mes %}
+        <div class="lst-row">
+          <span class="avatar">{{ a.amigo|iniciais }}</span>
+          <div>
+            <div class="t">{{ a.amigo }}</div>
+            <div class="s">{{ a.n }} impress{{ 'ão' if a.n == 1 else 'ões' }}{% if a.n %} · {{ a.tempo|duracao }} · {{ a.gramas|gramas }}{% endif %}{% if a.imprimindo %} · <em>imprimindo agora</em>{% endif %}{% if painel.na_fila_por_amigo.get(a.amigo) %} · <em>{{ painel.na_fila_por_amigo[a.amigo] }} na fila</em>{% endif %}</div>
+          </div>
+          <div class="v">{{ ((a.gasto or 0) + (a.imprimindo or 0))|reais }}<small>{% if a.imprimindo %}{{ a.imprimindo|reais }} em impressão{% else %}{{ '%.0f'|format(a.gasto / painel.mes.gasto * 100 if painel.mes.gasto else 0) }}% do mês{% endif %}</small></div>
+        </div>
+      {% else %}
+        <div class="empty">Ninguém imprimiu em {{ painel.nome_mes }} ainda.</div>
+      {% endfor %}
+      <div class="lst-foot"><a href="{{ url_for('dashboard') }}">Abrir o dashboard completo →</a></div>
+    </section>
+  </div>
+
+  {{ tabela_fila(fila, painel, dono=True) }}
+
+  <section class="card" id="feitas">
+    <div class="card-head linha">
+      <div><h2>{{ ic('history') }} Impressões feitas</h2><div class="sub2">as últimas que foram para a impressora (concluídas e que falharam) · um clique para imprimir de novo</div></div>
+      <a class="small" href="#historico" data-ir-aba="historico">ver todas</a>
+    </div>
+    {% for f in feitas %}
+      <div class="lst-row feita">
+        <span class="doc-ico st-{{ f.status }}">{{ ic('check' if f.status == 'concluida' else 'x') }}</span>
+        <div>
+          <div class="t" title="{{ f.arquivo_original }}">{{ f.observacao or f.arquivo_original }}</div>
+          <div class="s">{{ f.amigo }} · {{ f.finalizado_em|dataCurta }} · {{ f.tempo_s|duracao }} · {{ f.gramas|gramas }} ·
+            <span class="{{ 'txt-err' if f.status == 'falhou' }}">{{ STATUS_LABELS[f.status] }}{% if f.status == 'falhou' and f.falhou_em_pct is not none %} em {{ '%.0f'|format(f.falhou_em_pct) }}%{% endif %}</span></div>
+        </div>
+        <div class="feita-acoes">
+          <form method="post" action="{{ url_for('reimprimir', pid=f.id) }}" onsubmit='return confirm({{ ("Imprimir “" ~ (f.observacao or f.arquivo_original) ~ "” de novo AGORA?\n\n✔ A mesa está limpa (sem a peça anterior)?\n✔ O rolo " ~ (f.rolo_codigo or "") ~ " está na impressora?")|tojson }})'>
+            <input type="hidden" name="agora" value="1">
+            <button class="sm" {{ 'disabled' if impressora.configurada and (not impressora.pronta or atual) }}
+                    title="{{ 'Entra em primeiro na fila e já começa a imprimir' if (impressora.pronta and not atual) else 'A impressora está ocupada ou desconectada' }}">{{ ic('play') }} Imprimir de novo</button></form>
+          <form method="post" action="{{ url_for('reimprimir', pid=f.id) }}">
+            <button class="sm ghost" title="Só coloca no fim da fila, sem imprimir agora">{{ ic('list') }} <span class="rotulo">Pôr na fila</span></button></form>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty">Nenhuma impressão feita ainda.</div>
+    {% endfor %}
+  </section>
+
+  <div class="grade l-2-1">
+    <section class="card">
+      <div class="card-head linha">
+        <div><h2>Horas de impressão por dia</h2><div class="sub2">últimos 30 dias · concluídas e falhas</div></div>
+        <div class="legenda"><span><i style="background: var(--accent)"></i>Concluídas</span><span><i style="background: var(--err-line)"></i>Falhas</span></div>
+      </div>
+      <div class="grafico"><canvas id="grafico-dias" aria-label="Horas de impressão por dia nos últimos 30 dias"></canvas></div>
+    </section>
+    <div class="col-cards">
+      <section class="card" id="internet">
+        <div class="card-head">
+          <h2>{{ ic('globe') }} Link para os amigos</h2>
+          {% if tunel.ligado %}<span class="badge ok">no ar{{ ' · link fixo' if tunel.fixo }}</span>{% else %}<span class="badge">desligado</span>{% endif %}
+        </div>
+        {% if tunel.ligado %}
+          {% if tunel.url %}
+            <div class="link-box">
+              <input type="text" id="link" value="{{ tunel.url }}" readonly aria-label="Link para os amigos">
+              <button type="button" class="sm" onclick="copiar(this)">{{ ic('copy') }}<span> Copiar</span></button>
+            </div>
+          {% else %}<p class="muted" style="margin:0">Gerando link…</p>{% endif %}
+          <p class="small muted" style="margin:8px 0 0">
+            {% if tunel.fixo %}Este endereço <b>nunca muda</b> (Tailscale Funnel). Funciona enquanto o programa estiver aberto.
+            {% elif tailscale == 'pronto' %}Este link muda quando o túnel reinicia. Este computador pode ter um <b>link fixo</b>:
+              <form class="inline" method="post" action="{{ url_for('internet') }}"><input type="hidden" name="acao" value="ligar"><input type="hidden" name="link_modo" value="auto"><button class="link-btn">usar o link fixo</button></form>
+            {% else %}Este link muda quando o túnel reinicia. Para ter um <b>link fixo e grátis</b>, use o Tailscale:{% endif %}
+          </p>
+          <div class="card-foot">
+            <form method="post" action="{{ url_for('internet') }}"><input type="hidden" name="acao" value="desligar"><button class="sm ghost">Desligar</button></form>
+            <button type="button" class="sm ghost" id="qr-abrir">{{ ic('phone') }}<span> Entrar no celular</span></button>
+          </div>
+        {% else %}
+          {% if tunel.erro %}<div class="flash erro" style="margin:0 0 10px">{{ tunel.erro }}</div>{% endif %}
+          <form method="post" action="{{ url_for('internet') }}"><input type="hidden" name="acao" value="ligar">
+            <button class="block" {{ 'disabled' if senha_padrao }} title="{{ 'Troque a senha do dono primeiro' if senha_padrao else '' }}">Ligar acesso pela internet</button></form>
+          <div class="card-foot"><button type="button" class="sm ghost" id="qr-abrir">{{ ic('phone') }}<span> Entrar no celular</span></button></div>
+        {% endif %}
+        {% if tunel.ligado and not tunel.fixo and tailscale != 'pronto' %}
+          <ol class="small passos" style="margin:6px 0 0">
+            <li class="{{ 'feito' if tailscale != 'sem' }}">Instale o <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> neste computador{{ ' ✔' if tailscale != 'sem' }}.</li>
+            <li class="{{ 'feito' if tailscale == 'sem_funnel' }}">Abra o Tailscale e entre com a sua conta (é grátis){{ ' ✔' if tailscale == 'sem_funnel' }}.</li>
+            <li>Libere o <b>Funnel</b>: abra o Prompt de Comando, digite <code>tailscale funnel 5000</code> e abra o endereço que ele mostrar para aprovar. Depois feche o Prompt.</li>
+            <li>Volte aqui e clique em <b>Desligar</b> e depois em <b>Ligar acesso pela internet</b>: o link fixo aparece sozinho.</li>
+          </ol>
+        {% endif %}
+        <div class="link-admin" id="app-celular">
+          <div class="rot">{{ ic('phone') }} Aplicativo no celular <span class="muted">· Android e iPhone</span></div>
+          <p class="small muted">Abra o link dos amigos no <b>Chrome do Android</b>, toque em <b>⋮ → Instalar app</b> (ou "Adicionar à tela inicial"). No iPhone: Safari → Compartilhar → Adicionar à Tela de Início. Para já entrar como administrador, abra antes o link fixo do administrador aqui embaixo no mesmo navegador.</p>
+        </div>
+        <div class="link-admin" id="link-admin">
+          <div class="rot">{{ ic('key') }} Link fixo do administrador <span class="muted">· entra direto, sem senha</span></div>
+          {% if tunel.ligado and tunel.url %}
+            <div class="link-box">
+              <input type="text" id="link-adm-net" value="{{ tunel.url }}{{ link_admin }}" readonly aria-label="Link do administrador pela internet">
+              <button type="button" class="sm ghost" onclick="copiar(this, 'link-adm-net')">{{ ic('copy') }}<span> Copiar</span></button>
+            </div>
+          {% endif %}
+          {% if ip_casa %}
+            <div class="link-box">
+              <input type="text" id="link-adm-casa" value="http://{{ ip_casa }}:{{ porta }}{{ link_admin }}" readonly aria-label="Link do administrador no Wi-Fi de casa">
+              <button type="button" class="sm ghost" onclick="copiar(this, 'link-adm-casa')">{{ ic('copy') }}<span> Copiar</span></button>
+            </div>
+          {% endif %}
+          <p class="small muted">Guarde nos favoritos do celular. <b>Quem tiver esse link vira administrador</b>: não mande para ninguém.{% if tunel.ligado %} O 1º é pela internet, o 2º só funciona no Wi-Fi de casa.{% endif %}</p>
+          <form method="post" action="{{ url_for('admin_link_novo') }}" onsubmit="return confirm('Gerar um link novo? O link atual para de funcionar em todos os aparelhos que usam ele.')">
+            <button class="sm ghost">{{ ic('repeat') }} Gerar outro link (cancela o atual)</button></form>
+        </div>
+        <div class="qr-caixa" id="qr-caixa" hidden>
+          <div class="qr-lado" id="qr-internet" hidden><div class="qr-img"></div><div class="small"><b>Pela internet</b><br><span class="muted">de qualquer lugar</span></div></div>
+          <div class="qr-lado" id="qr-casa" hidden><div class="qr-img"></div><div class="small"><b>No Wi-Fi de casa</b><br><span class="muted">mesma rede do PC</span></div></div>
+          <p class="small muted qr-nota">Um código por celular: vale <b>uma vez</b> por <span id="qr-min">10</span> min. Não compartilhe.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>{{ ic('spool') }} Filamentos</h2><a class="small" href="#rolos" data-ir-aba="rolos">gerenciar</a></div>
+        {% for r in painel.rolos %}
+          {% set pct = [100, r.restante_g / r.peso_inicial_g * 100 if r.peso_inicial_g else 0]|min %}
+          <div class="rolo-card">
+            <div class="top"><span><span class="cod">{{ r.codigo }}</span>{% if r.descricao %} <span class="muted small">· {{ r.descricao }}</span>{% endif %}</span>
+              <span class="rolo-qtd"><b class="{{ 'txt-err' if r.falta else '' }}">{{ '%.0f'|format(pct) }}%</b> <span class="muted small">{{ r.restante_g|gramas }} de {{ r.peso_inicial_g|gramas }}</span></span></div>
+            <div class="est-barra {{ 'falta' if r.falta }}" title="{{ '%.0f'|format(pct) }}% do rolo"><div style="width: {{ pct }}%"></div></div>
+            <div class="small {{ 'txt-err' if r.falta else 'muted' }}">
+              {% if r.falta %}a fila precisa de {{ r.fila_precisa|gramas }} além da impressão atual: não vai dar
+              {% elif r.fila_precisa %}a fila vai usar {{ r.fila_precisa|gramas }} · sobram ~{{ r.sobra|gramas }}
+              {% else %}{{ r.material_nome }} · nada na fila para este rolo{% endif %}
+            </div>
+          </div>
+        {% else %}
+          <p class="small muted" style="margin:0">Nenhum filamento cadastrado. Cada impressão fica marcada com o código do rolo e o programa avisa quando o filamento não vai dar.</p>
+        {% endfor %}
+        <div class="card-foot"><a class="btn sm" href="#novo-rolo" data-ir-aba="novo-rolo">{{ ic('spool') }} Cadastrar filamento</a></div>
+      </section>
+    </div>
+  </div>
+</section>
+
+{# =================== HISTÓRICO =================== #}
+<section data-aba-sec="historico" hidden>
+  <section class="card">
+    <div class="card-head linha">
+      <div><h2>Histórico de impressões</h2><div class="sub2">as 50 mais recentes · falhas contam para o amigo por padrão; desligue “Cobrar” se a culpa foi da impressora</div></div>
+    </div>
+    {% if finalizadas %}
+    <div class="hist-cab"><span></span><span>Peça</span><span>Status</span><span>Cobrar</span><span style="text-align:right">Total</span><span></span></div>
+    {% for f in finalizadas %}
+      <div class="hist-row">
+        <div class="doc-ico st-{{ f.status }}">{{ ic({'concluida': 'check', 'falhou': 'x', 'cancelada': 'ban'}.get(f.status, 'file')) }}</div>
+        <div class="hist-main">
+          <div class="t" title="{{ f.arquivo_original }}">{{ f.observacao or f.arquivo_original }}</div>
+          <div class="s">{% if f.observacao %}<span class="arq-hist" title="{{ f.arquivo_original }}">{{ f.arquivo_original }}</span>{% endif %}<span>{{ f.amigo }}</span><span>{{ f.finalizado_em|dataCurta }}</span><span>{{ f.tempo_s|duracao }}</span><span>{{ f.gramas|gramas }}{% if f.rolo_codigo %} · {{ f.rolo_codigo }}{% endif %}</span>{% if f.grupo_id %}<span title="Foi impressa junto com outras peças, na mesma mesa">{{ ic('layers') }} mesa conjunta</span>{% endif %}</div>
+        </div>
+        <div class="hist-status">
+          <form class="inline" method="post" action="{{ url_for('mudar_status', pid=f.id) }}">
+            <select name="status" onchange="this.form.submit()" class="compact" aria-label="Status">
+              {% for k, v in STATUS_LABELS.items() %}<option value="{{ k }}" {{ 'selected' if k == f.status }}>{{ v }}</option>{% endfor %}
+            </select>
+          </form>
+          {% if f.status == 'falhou' and f.falhou_em_pct is not none %}<span class="small muted">em {{ '%.0f'|format(f.falhou_em_pct) }}%</span>{% endif %}
+        </div>
+        <div class="hist-cobrar">
+          {% if f.status != 'cancelada' %}
+            <form class="inline" method="post" action="{{ url_for('alternar_cobrar', pid=f.id) }}">
+              <span class="fin-rot">Cobrar</span>
+              <button class="toggle {{ 'on' if f.cobrar }}" role="switch" aria-checked="{{ 'true' if f.cobrar else 'false' }}" aria-label="Cobrar do amigo" title="{{ 'Cobrando do amigo' if f.cobrar else 'Não cobrar' }}"><span></span></button></form>
+          {% else %}<span class="muted small">—</span>{% endif %}
+        </div>
+        <div class="hist-total">{{ f.custo_total|reais }}</div>
+        <div class="hist-acoes">
+          <form method="post" action="{{ url_for('reimprimir', pid=f.id) }}"
+                onsubmit='return confirm({{ ("Colocar “" ~ f.arquivo_original ~ "” de " ~ f.amigo ~ " de novo no fim da fila?")|tojson }})'>
+            <button class="sm ghost" title="Colocar de novo no fim da fila">{{ ic('repeat') }} <span class="rotulo">Imprimir de novo</span></button></form>
+          <details class="mais">
+            <summary class="btn ghost sm icon" aria-label="Mais opções">{{ ic('more') }}</summary>
+            <div class="menu">
+              <form method="post" action="{{ url_for('reimprimir', pid=f.id) }}" onsubmit='return confirm({{ ("Imprimir “" ~ (f.observacao or f.arquivo_original) ~ "” de novo AGORA?\n\n✔ A mesa está limpa (sem a peça anterior)?\n✔ O rolo " ~ (f.rolo_codigo or "") ~ " está na impressora?")|tojson }})'>
+                <input type="hidden" name="agora" value="1"><button class="ghost sm">{{ ic('play') }} Imprimir de novo agora</button></form>
+              <a class="btn ghost sm" href="{{ url_for('baixar', pid=f.id) }}">{{ ic('download') }} Baixar G-code</a>
+              <form method="post" action="{{ url_for('excluir', pid=f.id) }}" onsubmit="return confirm('Excluir de vez? Some do histórico e dos gastos.')">
+                <button class="ghost sm txt-err">{{ ic('trash') }} Excluir do histórico</button></form>
+              {% if todos_rolos %}
+                <form method="post" action="{{ url_for('trocar_rolo', pid=f.id) }}" class="menu-rolo">
+                  <label>Rolo usado</label>
+                  <select name="rolo_id" class="compact" onchange="this.form.submit()">
+                    {% if not f.rolo_id %}<option value="">—</option>{% endif %}
+                    {% for r in todos_rolos %}<option value="{{ r.id }}" {{ 'selected' if r.id == f.rolo_id }}>{{ r.codigo }}{% if r.arquivado %} (arquivado){% endif %}</option>{% endfor %}
+                  </select>
+                </form>
+              {% endif %}
+            </div>
+          </details>
+        </div>
+      </div>
+    {% endfor %}
+    {% else %}<div class="empty">Nada finalizado ainda.</div>{% endif %}
+  </section>
+</section>
+
+{# =================== CONFIGURAÇÕES =================== #}
+<section data-aba-sec="config" hidden>
+<div class="cfg-grid">
+<section class="card">
+  <div class="card-head"><h2>{{ ic('printer') }} Impressora</h2>
+    {% if i.configurada %}<span class="badge {{ 'ok' if i.conectada else ('err' if i.online is sameas false else '') }}">{{ 'conectada' if i.conectada else ('sem contato' if i.online is sameas false else 'desconectada') }}</span>{% endif %}
+  </div>
+  <dl class="info">
+    <dt>Conexão</dt><dd>{{ 'OctoPrint' if i.configurada else 'cartão microSD (manual)' }}</dd>
+    {% if i.configurada %}
+      <dt>Endereço</dt><dd class="mono">{{ cfg.octoprint_url }}</dd>
+      <dt>Estado</dt><dd>{{ i.texto if i.online else '—' }}</dd>
+      {% if i.conectada %}
+        <dt>Bico</dt><dd>{{ '%.0f'|format(i.temp_bico or 0) }} °C <span class="muted">/ {{ '%.0f'|format(i.alvo_bico or 0) }}</span></dd>
+        <dt>Mesa</dt><dd>{{ '%.0f'|format(i.temp_mesa or 0) }} °C <span class="muted">/ {{ '%.0f'|format(i.alvo_mesa or 0) }}</span></dd>
+      {% endif %}
+    {% endif %}
+    <dt>Energia</dt><dd>{{ cfg.potencia_w }} W · R$ {{ cfg.tarifa_kwh }}/kWh</dd>
+    <dt>Correção do Cura</dt><dd>× {{ cfg.fator_tempo }}</dd>
+  </dl>
+</section>
+
+<details class="card fold" {{ 'open' if not i.configurada }}>
+  <summary><span>{{ ic('plug') }}Conexão com o OctoPrint</span><span class="small muted">{{ cfg.octoprint_url or 'não configurado' }}</span></summary>
+  <form method="post" action="{{ url_for('octoprint_config') }}">
+    <div class="row">
+      <div class="field"><label>Endereço do OctoPrint</label><input type="text" name="octoprint_url" value="{{ cfg.octoprint_url }}" placeholder="http://192.168.1.30"></div>
+      <div class="field"><label>Chave de API {% if cfg.octoprint_api_key %}<span class="muted">(salva · vazio = manter)</span>{% endif %}</label>
+        <input type="password" name="octoprint_api_key" autocomplete="off" placeholder="{{ '••••••••••••' if cfg.octoprint_api_key else 'cole a chave aqui' }}"></div>
+    </div>
+    <div class="field"><label>Foto da webcam <span class="muted">(opcional · vazio = padrão do OctoPi)</span></label>
+      <input type="text" name="octoprint_webcam" value="{{ cfg.octoprint_webcam }}" placeholder="http://192.168.1.30/webcam/?action=snapshot"></div>
+    <button type="submit">Salvar e testar</button>
+    <p class="small muted">A chave fica no OctoPrint → Configurações → <b>Application Keys</b>. Só você vê e usa isso; os amigos nunca falam com o OctoPrint.</p>
+  </form>
+</details>
+
+<details class="card fold" id="custos" {{ 'open' if senha_padrao }}>
+  <summary><span>{{ ic('sliders') }}Custos e senhas</span><span class="small muted">{{ cfg.potencia_w }} W · R$ {{ cfg.tarifa_kwh }}/kWh</span></summary>
+  <form method="post" action="{{ url_for('salvar_config') }}">
+    <div class="row">
+      <div class="field"><label>Potência média (W)</label><input type="text" name="potencia_w" value="{{ cfg.potencia_w }}" inputmode="decimal"></div>
+      <div class="field"><label>Tarifa de energia (R$/kWh)</label><input type="text" name="tarifa_kwh" value="{{ cfg.tarifa_kwh }}" inputmode="decimal"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Diâmetro do filamento (mm)</label><input type="text" name="diametro_mm" value="{{ cfg.diametro_mm }}" inputmode="decimal"></div>
+      <div class="field"><label>Correção do tempo do Cura</label><input type="text" name="fator_tempo" value="{{ cfg.fator_tempo }}" inputmode="decimal">
+        <div class="small muted">1.1 = demoram 10% a mais que o Cura diz</div></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Nova senha do dono <span class="muted">(mín. 6 · vazio = manter)</span></label><input type="password" name="nova_senha" autocomplete="new-password"></div>
+      <div class="field"><label>Senha da galera <span class="muted">({{ 'definida · digite outra para trocar' if tem_senha_galera else 'nenhuma' }})</span></label>
+        <input type="text" name="senha_galera" autocomplete="off" placeholder="senha que você passa no grupo">
+        {% if tem_senha_galera %}<label class="check"><input type="checkbox" name="remover_senha_galera"> remover senha da galera</label>{% endif %}
+      </div>
+    </div>
+    <button type="submit">Salvar</button>
+    <p class="small muted">Energia = potência × horas × tarifa (0 W = não contar energia). Ao salvar, os custos da fila são recalculados.</p>
+  </form>
+</details>
+
+<details class="card fold" id="rolos" open>
+  <summary><span>{{ ic('spool') }}Filamentos (rolos)</span><span class="small muted">{% for r in todos_rolos if not r.arquivado %}{{ r.codigo }} {{ r.restante_g|gramas }}{{ ' · ' if not loop.last }}{% else %}nenhum{% endfor %}</span></summary>
+  {% for r in todos_rolos %}
+    <div class="rolo-card {{ 'rolo-arq' if r.arquivado }}">
+      <div class="top">
+        <span><span class="cod">{{ r.codigo }}</span> <span class="muted small">· {{ r.material_nome }} · {{ r.impressoes }} impress{{ 'ão' if r.impressoes == 1 else 'ões' }}{% if r.arquivado %} · arquivado{% endif %}</span></span>
+        <b>{{ r.restante_g|gramas }} <span class="muted small">de {{ r.peso_inicial_g|gramas }}</span></b>
+      </div>
+      {% set pct = [100, r.restante_g / r.peso_inicial_g * 100 if r.peso_inicial_g else 0]|min %}
+      <div class="est-barra"><div style="width: {{ pct }}%"></div></div>
+      <form method="post" action="{{ url_for('rolo_salvar', rid=r.id) }}" class="rolo-form">
+        <div><label>Código</label><input type="text" name="codigo" value="{{ r.codigo }}"></div>
+        <div><label>Descrição (cor, marca)</label><input type="text" name="descricao" value="{{ r.descricao or '' }}" placeholder="ex.: Preto Voolt"></div>
+        <div><label>Pesei e tem (g)</label><input type="text" name="restante_g" inputmode="decimal" placeholder="{{ '%.0f'|format(r.restante_g) }}"></div>
+        <div style="display:flex; gap:6px"><button class="sm">Salvar</button>
+          <button class="sm ghost" name="acao" value="arquivar" title="{{ 'Reativar' if r.arquivado else 'Arquivar (rolo acabou)' }}">{{ 'Reativar' if r.arquivado else 'Arquivar' }}</button></div>
+      </form>
+      <details class="extrato">
+        <summary>ver extrato</summary>
+        <table><tbody>
+          {% for m in extrato[r.id] %}
+            <tr><td class="num">{{ m.criado_em|dataCurta }}</td><td>{{ m.motivo }}</td><td class="n {{ 'txt-err' if m.gramas < 0 else 'txt-ok' }}">{{ '%+.2f'|format(m.gramas)|replace('.', ',') }} g</td></tr>
+          {% endfor %}
+        </tbody></table>
+      </details>
+    </div>
+  {% else %}
+    <p class="small muted">Nenhum rolo cadastrado ainda.</p>
+  {% endfor %}
+  <h3 class="section-title" id="novo-rolo" style="margin-top:18px">Cadastrar filamento novo</h3>
+  <form method="post" action="{{ url_for('rolo_novo') }}" class="rolo-novo">
+    <div><label>Material</label>
+      <select name="material_id" id="rolo-mat" onchange="document.getElementById('rolo-cod').placeholder = this.selectedOptions[0].dataset.cod">
+        {% for m in materiais if m.ativo %}<option value="{{ m.id }}" data-cod="{{ sugestao_codigo[m.id] }}">{{ m.nome }}</option>{% endfor %}
+      </select></div>
+    <div><label>Código</label><input type="text" name="codigo" id="rolo-cod" placeholder="{{ sugestao_codigo[(materiais|selectattr('ativo')|first).id] if materiais else '' }}"></div>
+    <div><label>Descrição</label><input type="text" name="descricao" placeholder="cor, marca"></div>
+    <div><label>Peso do rolo (g)</label><input type="text" name="peso_inicial_g" value="1000" inputmode="decimal"></div>
+    <div><label>Já usado fora (g)</label><input type="text" name="usado_fora_g" value="0" inputmode="decimal"></div>
+    <div><button>{{ ic('spool') }} Cadastrar filamento</button></div>
+  </form>
+  <p class="small muted">Deixe o código vazio para usar o sugerido. O rolo é descontado sozinho quando uma impressão termina, falha ou é cancelada no meio (pelo filamento que realmente saiu). Se pesar o rolo, informe em “Pesei e tem” e o ajuste entra no extrato.</p>
+</details>
+
+<details class="card fold" id="materiais">
+  <summary><span>{{ ic('layers') }}Materiais e preços</span><span class="small muted">{% for m in materiais if m.ativo %}{{ m.nome }} {{ m.preco_kg|reais }}{{ ' · ' if not loop.last }}{% endfor %}</span></summary>
+  <div class="table-wrap">
+    <table class="mat">
+      <thead><tr><th>Nome</th><th>R$/kg</th><th>g/cm³</th><th>Ativo</th><th></th></tr></thead>
+      <tbody>
+      {% for m in materiais %}
+        <tr>
+          <td><input type="text" name="nome" value="{{ m.nome }}" form="mat-{{ m.id }}" style="min-width:70px"></td>
+          <td><input type="text" name="preco_kg" value="{{ '%.2f'|format(m.preco_kg) }}" form="mat-{{ m.id }}" inputmode="decimal" style="width:84px"></td>
+          <td><input type="text" name="densidade" value="{{ m.densidade }}" form="mat-{{ m.id }}" inputmode="decimal" style="width:64px"></td>
+          <td><input type="checkbox" name="ativo" form="mat-{{ m.id }}" {{ 'checked' if m.ativo }}></td>
+          <td><form id="mat-{{ m.id }}" method="post" action="{{ url_for('salvar_material') }}"><input type="hidden" name="id" value="{{ m.id }}"><button class="sm ghost">Salvar</button></form></td>
+        </tr>
+      {% endfor %}
+        <tr>
+          <td><input type="text" name="nome" form="mat-novo" placeholder="Novo (ex.: PLA Silk)" required></td>
+          <td><input type="text" name="preco_kg" form="mat-novo" placeholder="120" inputmode="decimal" required style="width:84px"></td>
+          <td><input type="text" name="densidade" form="mat-novo" value="1.24" inputmode="decimal" required style="width:64px"></td>
+          <td></td>
+          <td><form id="mat-novo" method="post" action="{{ url_for('salvar_material') }}"><button class="sm">Adicionar</button></form></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">Preço de 1 kg de cada material. O estoque fica nos <a href="#rolos" data-ir-aba="rolos">rolos</a>.</p>
+</details>
+
+<details class="card fold" id="aplicativo">
+  <summary><span>{{ ic('printer') }}Aplicativo (janela do programa)</span><span class="small muted">fechar {{ 'minimiza para a bandeja' if cfg.fechar_minimiza != '0' else 'desliga o programa' }}</span></summary>
+  <form method="post" action="{{ url_for('salvar_aplicativo') }}">
+    <label class="juntar-op" style="margin-top:0">
+      <input type="checkbox" name="fechar_minimiza" value="1" {{ 'checked' if cfg.fechar_minimiza != '0' }} onchange="this.form.submit()">
+      <span><b>Ao fechar a janela, minimizar para a bandeja</b><br><span class="muted small">O X só esconde a janela, sem aviso, e o programa continua funcionando (ícone da impressora perto do relógio). Para desligar de verdade: botão direito no ícone → <b>Fechar programa</b>.</span></span>
+    </label>
+  </form>
+  <p class="small muted" style="margin-bottom:0">Desmarcado, o X desliga o programa (pergunta antes). Vale para o aplicativo neste computador.</p>
+</details>
+
+<details class="card fold" id="celular">
+  <summary><span>{{ ic('bell') }}Avisos no celular</span><span class="small muted">{{ 'ligados' if cfg.ntfy_topico else 'desligados' }}</span></summary>
+  <p class="small" style="margin-top:0">Receba no celular o <b>link novo</b> se ele mudar. É só tocar no aviso para abrir o painel.</p>
+  <ol class="small passos">
+    <li>Instale o app gratuito <b>ntfy</b> (<a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a> · <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a>).</li>
+    <li>No app, toque em <b>+</b> e assine o tópico abaixo (copie exatamente igual).</li>
+    <li>Clique em <b>Salvar e testar</b> e veja se o aviso chega.</li>
+  </ol>
+  <form method="post" action="{{ url_for('salvar_celular') }}">
+    <div class="row" style="align-items:flex-end">
+      <div class="field" style="flex:1 1 220px"><label>Tópico</label><input type="text" name="ntfy_topico" value="{{ cfg.ntfy_topico or sugestao_topico }}" autocomplete="off" spellcheck="false"></div>
+      <div class="field" style="flex:0 0 auto"><button name="testar" value="1">Salvar e testar</button></div>
+      {% if cfg.ntfy_topico %}<div class="field" style="flex:0 0 auto"><button class="ghost" name="desligar" value="1">Desligar</button></div>{% endif %}
+    </div>
+  </form>
+  <p class="small muted">O tópico funciona como uma senha: quem souber o nome recebe os avisos.</p>
+</details>
+</div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.AO_VIVO = {
+    status: "{{ url_for('status_json') }}",
+    gcode: "{{ url_for('gcode', pid=0)[:-7] }}",
+    visualizador: "{{ url_for('static', filename='visualizador.js') }}?v={{ versao_estatica }}",
+    webcam: {{ (url_for('webcam') if impressora.configurada else '')|tojson }},
+    fila: {{ fila|map(attribute='id')|list|tojson }},
+  };
+
+  // ---- abas (Visão geral · Histórico · Configurações), guardadas no endereço (#)
+  (function () {
+    const nomes = { geral: "Visão geral", historico: "Histórico", config: "Configurações" };
+    const dentroDeConfig = ["config", "custos", "rolos", "novo-rolo", "materiais", "aplicativo", "celular"];
+    function abrir(alvo, rolar) {
+      const aba = dentroDeConfig.includes(alvo) ? "config" : (nomes[alvo] ? alvo : "geral");
+      document.querySelectorAll("[data-aba]").forEach(b => b.classList.toggle("on", b.dataset.aba === aba));
+      document.querySelectorAll("[data-aba-sec]").forEach(s => { s.hidden = s.dataset.abaSec !== aba; });
+      document.getElementById("crumb-aba").textContent = nomes[aba];
+      const el = alvo !== aba ? document.getElementById(alvo) : null;
+      if (el && el.tagName === "DETAILS") el.open = true;
+      if (rolar && el) el.scrollIntoView({ block: "start" });
+    }
+    document.querySelectorAll("[data-aba]").forEach(b => b.addEventListener("click", () => { history.replaceState(null, "", "#" + b.dataset.aba); abrir(b.dataset.aba); }));
+    document.addEventListener("click", ev => {
+      const a = ev.target.closest("[data-ir-aba]");
+      if (!a) return;
+      ev.preventDefault();
+      const alvo = a.dataset.irAba;
+      document.querySelectorAll("details.atencao").forEach(d => d.open = false);
+      history.replaceState(null, "", "#" + alvo); abrir(alvo, true);
+    });
+    abrir(location.hash.slice(1) || "geral", true);
+    addEventListener("hashchange", () => abrir(location.hash.slice(1), true));
+    document.getElementById("ver-pendencias")?.addEventListener("click", () => {
+      const d = document.querySelector("details.atencao"); if (d) { d.open = true; scrollTo({ top: 0, behavior: "smooth" }); }
+    });
+  })();
+
+  // ---- gráfico de horas por dia
+  (function () {
+    const dados = {{ painel.grafico|tojson }};
+    let grafico = null;
+    async function desenhar() {
+      if (!window.Chart) await new Promise((ok, erro) => {
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+        s.onload = ok; s.onerror = erro; document.head.appendChild(s);
+      });
+      const css = getComputedStyle(document.documentElement), cor = n => css.getPropertyValue(n).trim();
+      const horas = h => { const t = Math.round(h * 60); return t >= 60 ? `${Math.floor(t / 60)}h ${String(t % 60).padStart(2, "0")}min` : `${t} min`; };
+      if (grafico) grafico.destroy();
+      grafico = new Chart(document.getElementById("grafico-dias"), {
+        type: "bar",
+        data: { labels: dados.rotulos, datasets: [
+          { label: "Concluídas", data: dados.concluidas, backgroundColor: cor("--accent"), borderRadius: 4, borderSkipped: "bottom", stack: "h" },
+          { label: "Falhas", data: dados.falhas, backgroundColor: cor("--err-line"), borderRadius: 4, borderSkipped: "bottom", stack: "h" },
+        ] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { display: false },
+                     tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${horas(c.parsed.y)}` } } },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { color: cor("--muted"), maxRotation: 0, autoSkipPadding: 12, font: { size: 11 } }, border: { color: cor("--border") } },
+            y: { stacked: true, beginAtZero: true, grid: { color: cor("--border-2") }, border: { display: false },
+                 ticks: { color: cor("--muted"), font: { size: 11 }, callback: v => v + "h", maxTicksLimit: 5 } },
+          },
+          datasets: { bar: { maxBarThickness: 18, categoryPercentage: .7 } },
+        },
+      });
+    }
+    desenhar().catch(() => { document.querySelector(".grafico").innerHTML = '<div class="empty">Não consegui carregar o gráfico (sem internet?).</div>'; });
+    addEventListener("tema", () => desenhar());
+  })();
+
+  // ---- QR Code para entrar como dono pelo celular
+  document.getElementById("qr-abrir")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget; btn.disabled = true;
+    const r = await fetch("{{ url_for('admin_qr_novo') }}", { method: "POST" }).then(r => r.json()).catch(() => null);
+    btn.disabled = false;
+    if (!r) { alert("Não consegui gerar o QR Code."); return; }
+    if (!window.qrcode) await new Promise((ok, erro) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
+      s.onload = ok; s.onerror = erro; document.head.appendChild(s);
+    });
+    const desenhar = (id, url) => {
+      const lado = document.getElementById(id); lado.hidden = !url;
+      if (!url) return;
+      const q = qrcode(0, "M"); q.addData(url); q.make();
+      lado.querySelector(".qr-img").innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+    };
+    desenhar("qr-internet", r.internet); desenhar("qr-casa", r.casa);
+    document.getElementById("qr-min").textContent = r.minutos;
+    document.getElementById("qr-caixa").hidden = false;
+    btn.querySelector("span").textContent = " Gerar outro QR";
+  });
+  function copiar(btn, id) {
+    const i = document.getElementById(id || "link"); i.select();
+    navigator.clipboard.writeText(i.value).then(() => { btn.querySelector("span").textContent = " Copiado"; });
+  }
+  {% if tunel.ligado and not tunel.url %}
+  const espera = setInterval(async () => {
+    const r = await fetch("{{ url_for('internet_status') }}").then(r => r.json()).catch(() => null);
+    if (r && (r.url || !r.ligado)) { clearInterval(espera); location.reload(); }
+  }, 1500);
+  {% endif %}
+</script>
+<script src="{{ url_for('static', filename='ao_vivo.js') }}?v={{ versao_estatica }}"></script>
+{% endblock %}

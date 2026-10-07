@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Entrar · Administrativo{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 380px; margin: 40px auto;">
+  <h2>Administrativo</h2>
+  <p class="muted small">Área para controlar a fila, baixar os arquivos e ajustar preços.</p>
+  <form method="post">
+    <div class="field">
+      <label for="senha">Senha</label>
+      <input type="password" id="senha" name="senha" autofocus required>
+    </div>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

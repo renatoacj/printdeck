@@ -1,0 +1,26 @@
+# ambiente e lixo do Python
+.venv/
+__pycache__/
+*.pyc
+
+# dados de quem usa (banco com senhas e chave do OctoPrint, G-codes dos amigos, cópias, registros)
+dados/
+dados_*/
+copias_de_seguranca/
+*.db
+*.db-journal
+*.log
+*.pid
+
+# configuração local de ferramentas
+.claude/
+
+# arquivos pessoais que estão na mesma pasta e não fazem parte do PrintDeck
+*.gcode
+*.exe
+*.lnk
+*.f3d
+*.obj
+*.mtl
+fusion.py
+fusion_scripts/
