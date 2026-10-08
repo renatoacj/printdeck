@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PrintDeck</string>
+    <string name="trocar_endereco">Trocar endereço</string>
+
+    <color name="fundo">#111110</color>
+    <color name="azul">#2A78D6</color>
+
+    <style name="Tema" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@color/fundo</item>
+        <item name="android:navigationBarColor">@color/fundo</item>
+        <item name="android:colorAccent">@color/azul</item>
+    </style>
+</resources>

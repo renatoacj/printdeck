@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Segurar o dedo no ícone do app mostra "Trocar endereço" -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="trocar"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/trocar_endereco">
+        <intent
+            android:action="com.printdeck.app.TROCAR"
+            android:targetPackage="com.printdeck.app"
+            android:targetClass="com.printdeck.app.MainActivity" />
+    </shortcut>
+</shortcuts>
